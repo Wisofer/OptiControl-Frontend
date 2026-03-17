@@ -1,0 +1,10 @@
+export { Dashboard } from "./Dashboard";
+export { Login } from "./Login";
+export { Clients } from "./Clients";
+export { Inventario } from "./Inventario";
+export { Ventas } from "./Ventas";
+export { Servicios } from "./Servicios";
+export { Historial } from "./Historial";
+export { Expenses } from "./Expenses";
+export { Reports } from "./Reports";
+export { Settings } from "./Settings";

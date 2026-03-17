@@ -1,0 +1,23 @@
+/** Facturas con información completa (demo ~3 meses: encomiendas, pedidos). */
+export const mockInvoices = [
+  { id: "INV-001", clientId: "1", clientName: "María García", date: "2024-12-02", amount: 1200, status: "Pagado", paymentMethod: "Cordobas", travelDate: "2025-01-10", returnDate: "2025-01-17", concept: "Encomienda USA - Amazon" },
+  { id: "INV-002", clientId: "2", clientName: "Carlos López", date: "2024-12-05", amount: 980, status: "Pendiente", paymentMethod: "Cordobas", travelDate: "2025-04-01", returnDate: "2025-04-08", concept: "Pedido Shein + envío" },
+  { id: "INV-003", clientId: "3", clientName: "Ana Martínez", date: "2024-12-10", amount: 650, status: "Pagado", paymentMethod: "Dolares", travelDate: "2025-03-20", returnDate: "2025-03-25", concept: "eBay - encomienda" },
+  { id: "INV-004", clientId: "4", clientName: "Pedro Sánchez", date: "2024-12-12", amount: 720, status: "Vencida", paymentMethod: "Cordobas", travelDate: "2025-05-01", returnDate: "2025-05-07", concept: "AliExpress - paquete" },
+  { id: "INV-005", clientId: "5", clientName: "Laura Fernández", date: "2024-12-15", amount: 1100, status: "Pagado", paymentMethod: "Cordobas", travelDate: "2025-04-15", returnDate: "2025-04-22", concept: "Amazon - envío internacional" },
+  { id: "INV-006", clientId: "6", clientName: "Javier Ruiz", date: "2024-12-18", amount: 450, status: "Pendiente", paymentMethod: "Dolares", travelDate: "2025-06-01", returnDate: "2025-06-05", concept: "Shein - ropa" },
+  { id: "INV-007", clientId: "7", clientName: "Carmen Díaz", date: "2024-12-20", amount: 1850, status: "Pagado", paymentMethod: "Cordobas", travelDate: "2025-01-08", returnDate: "2025-01-15", concept: "Encomienda USA - varios artículos" },
+  { id: "INV-008", clientId: "8", clientName: "Roberto Morales", date: "2024-12-22", amount: 920, status: "Pagado", paymentMethod: "Cordobas", travelDate: "2025-02-12", returnDate: "2025-02-18", concept: "eBay - electrónica" },
+  { id: "INV-009", clientId: "9", clientName: "Elena Vega", date: "2025-01-03", amount: 1350, status: "Pendiente", paymentMethod: "Dolares", travelDate: "2025-03-10", returnDate: "2025-03-17", concept: "Pedido Shein + casillero" },
+  { id: "INV-010", clientId: "10", clientName: "Miguel Castro", date: "2025-01-06", amount: 780, status: "Pagado", paymentMethod: "Cordobas", travelDate: "2024-12-28", returnDate: "2025-01-02", concept: "Walmart USA - encomienda" },
+  { id: "INV-011", clientId: "11", clientName: "Isabel Romero", date: "2025-01-10", amount: 2100, status: "Pagado", paymentMethod: "Cordobas", travelDate: "2025-01-22", returnDate: "2025-01-29", concept: "Amazon - compra grande" },
+  { id: "INV-012", clientId: "12", clientName: "Francisco Herrera", date: "2025-01-14", amount: 560, status: "Vencida", paymentMethod: "Cordobas", travelDate: "2025-04-20", returnDate: "2025-04-24", concept: "AliExpress - envío" },
+  { id: "INV-013", clientId: "13", clientName: "Patricia Gómez", date: "2025-01-18", amount: 890, status: "Pagado", paymentMethod: "Dolares", travelDate: "2025-02-05", returnDate: "2025-02-11", concept: "eBay - ropa y accesorios" },
+  { id: "INV-014", clientId: "14", clientName: "Antonio Reyes", date: "2025-01-22", amount: 440, status: "Pagado", paymentMethod: "Cordobas", travelDate: "2024-12-15", returnDate: "2024-12-19", concept: "Amazon - artículo pequeño" },
+  { id: "INV-015", clientId: "15", clientName: "Sandra Jiménez", date: "2025-01-25", amount: 1650, status: "Pendiente", paymentMethod: "Cordobas", travelDate: "2025-05-10", returnDate: "2025-05-20", concept: "Shein - pedido múltiple" },
+  { id: "INV-016", clientId: "16", clientName: "Daniel Torres", date: "2025-01-28", amount: 720, status: "Pagado", paymentMethod: "Dolares", travelDate: "2025-01-30", returnDate: "2025-02-05", concept: "Wish - encomienda" },
+  { id: "INV-017", clientId: "17", clientName: "Rosa Ramírez", date: "2025-02-01", amount: 980, status: "Pagado", paymentMethod: "Cordobas", travelDate: "2025-02-18", returnDate: "2025-02-24", concept: "Amazon - envío a Nicaragua" },
+  { id: "INV-018", clientId: "18", clientName: "Luis Flores", date: "2025-02-05", amount: 1150, status: "Pendiente", paymentMethod: "Cordobas", travelDate: "2025-06-15", returnDate: "2025-06-22", concept: "eBay - casillero" },
+  { id: "INV-019", clientId: "19", clientName: "Mónica Silva", date: "2025-02-10", amount: 620, status: "Pagado", paymentMethod: "Dolares", travelDate: "2024-12-22", returnDate: "2024-12-28", concept: "Shein - encomienda" },
+  { id: "INV-020", clientId: "20", clientName: "Andrés Mendoza", date: "2025-02-14", amount: 1380, status: "Pagado", paymentMethod: "Cordobas", travelDate: "2025-01-12", returnDate: "2025-01-19", concept: "Amazon + Shein - consolidado" },
+];
