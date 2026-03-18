@@ -8,12 +8,13 @@ import {
   TableHeaderCell,
   TableCell,
   VerticalBarChart,
+  PieChart,
   TableSkeleton,
 } from "../components/ui";
 import { useDashboard } from "../hooks/useDashboard";
 import { useSettings } from "../hooks/useSettings";
 import { formatCurrency, formatDateTime } from "../utils/format";
-import { DollarSign, Users, Package, ShoppingBag, TrendingUp, Eye } from "lucide-react";
+import { DollarSign, Users, Package, TrendingUp, Eye, ChartPie } from "lucide-react";
 import Skeleton from "react-loading-skeleton";
 import { SkeletonTheme } from "react-loading-skeleton";
 import { cn } from "../utils/cn";
@@ -46,28 +47,32 @@ function DashboardSkeleton() {
             </Card>
           ))}
         </div>
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <Card>
-              <Skeleton width={160} height={22} className="mb-4" />
-              <div className="pt-2 pb-2">
-                <Skeleton width="100%" height={200} />
-              </div>
-            </Card>
-          </div>
-          <div>
+        <div className="space-y-6">
+          <Card>
+            <Skeleton width={160} height={22} className="mb-4" />
+            <div className="pt-2 pb-2">
+              <Skeleton width="100%" height={200} />
+            </div>
+          </Card>
+          <div className="grid gap-6 sm:grid-cols-2">
             <Card>
               <Skeleton width={180} height={22} className="mb-4" />
               <div className="flex flex-col gap-2 pt-2">
                 <Skeleton height={24} count={5} />
               </div>
             </Card>
+            <Card>
+              <Skeleton width={180} height={22} className="mb-4" />
+              <div className="flex items-center justify-center pt-2 pb-2">
+                <Skeleton circle height={160} width={160} />
+              </div>
+            </Card>
           </div>
+          <Card>
+            <Skeleton width={160} height={22} className="mb-4" />
+            <TableSkeleton columns={2} rows={6} />
+          </Card>
         </div>
-        <Card>
-          <Skeleton width={160} height={22} className="mb-4" />
-          <TableSkeleton columns={2} rows={6} />
-        </Card>
       </div>
     </SkeletonTheme>
   );
@@ -92,6 +97,7 @@ export function Dashboard() {
   const productsCount = summary?.productsCount ?? 0;
   const clientsCount = summary?.clientsCount ?? 0;
   const monthlyChartData = (monthlyIncome || []).map((m) => ({ label: m.monthName || m.month || "", value: m.amount || 0 }));
+  const pieChartData = (topProducts || []).slice(0, 8).map((p) => ({ label: p.name || "Sin nombre", value: p.quantity || 0 }));
 
   const cardBase =
     "rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition-shadow";
@@ -170,81 +176,104 @@ export function Dashboard() {
         </div>
       </section>
 
-      <section>
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
+      {/* Sección Análisis: gráficos bien ordenados por bloques */}
+      <section className="space-y-6">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
           Análisis
         </h2>
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <Card className={`${cardBase} overflow-hidden`}>
-              <div className="px-5 pt-5 pb-2">
-                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Ventas mensuales</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Últimos meses</p>
-              </div>
-              <div className="px-5 pb-5 pt-2">
-                {monthlyChartData.length > 0 ? (
-                  <VerticalBarChart
-                    data={monthlyChartData}
-                    valueFormat={(v) => formatCurrency(v)}
-                    barClassName="bg-primary-500 hover:bg-primary-600 dark:bg-primary-500 dark:hover:bg-primary-400"
-                  />
-                ) : (
-                  <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">Sin datos de ventas mensuales</p>
-                )}
-              </div>
-            </Card>
+
+        {/* Bloque 1: Ventas mensuales (ancho completo) */}
+        <Card className={`${cardBase} overflow-hidden`}>
+          <div className="px-5 pt-5 pb-2">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Ventas mensuales</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Últimos meses</p>
           </div>
-          <Card className={`${cardBase} overflow-hidden`}>
+          <div className="px-5 pb-5 pt-2">
+            {monthlyChartData.length > 0 ? (
+              <VerticalBarChart
+                data={monthlyChartData}
+                valueFormat={(v) => formatCurrency(v)}
+                barClassName="bg-primary-500 hover:bg-primary-600 dark:bg-primary-500 dark:hover:bg-primary-400"
+              />
+            ) : (
+              <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">Sin datos de ventas mensuales</p>
+            )}
+          </div>
+        </Card>
+
+        {/* Bloque 2: Productos más vendidos + Distribución por producto (dos columnas, alineadas arriba) */}
+        <div className="grid gap-6 sm:grid-cols-2">
+          <Card className={`${cardBase} overflow-hidden h-fit`}>
             <div className="px-5 pt-5 pb-2">
               <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                <Eye className="h-4 w-4 text-primary-500" />
+                <Eye className="h-4 w-4 text-primary-500 shrink-0" />
                 Productos más vendidos
               </h3>
             </div>
             <div className="px-5 pb-5 pt-2">
               {(topProducts || []).length === 0 ? (
-                <p className="text-sm text-slate-500 dark:text-slate-400 py-4 text-center">Sin ventas registradas aún</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 py-6 text-center">Sin ventas registradas aún</p>
               ) : (
                 <ul className="space-y-2">
                   {(topProducts || []).slice(0, 6).map((p, i) => (
                     <li key={p.name || i} className="flex justify-between items-center text-sm py-1.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
                       <span className="font-medium text-slate-800 dark:text-slate-200 truncate pr-2">{p.name}</span>
-                      <span className="text-primary-600 dark:text-primary-400 font-semibold tabular-nums">{p.quantity} ud.</span>
+                      <span className="text-primary-600 dark:text-primary-400 font-semibold tabular-nums shrink-0">{p.quantity} ud.</span>
                     </li>
                   ))}
                 </ul>
               )}
             </div>
           </Card>
+          <Card className={`${cardBase} overflow-hidden h-fit`}>
+            <div className="px-5 pt-5 pb-2">
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <ChartPie className="h-4 w-4 text-primary-500 shrink-0" />
+                Distribución por producto
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Proporción de unidades vendidas</p>
+            </div>
+            <div className="px-5 pb-5 pt-2">
+              {pieChartData.length === 0 || pieChartData.every((d) => d.value === 0) ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400 py-6 text-center">Sin ventas registradas aún</p>
+              ) : (
+                <PieChart
+                  data={pieChartData}
+                  size={180}
+                  valueFormat={(v) => `${v} ud.`}
+                  className="min-h-[180px]"
+                />
+              )}
+            </div>
+          </Card>
         </div>
-      </section>
 
-      <section>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            Actividad reciente
-          </h2>
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-slate-500 dark:text-slate-400 mr-2">Mostrar:</span>
-            {ACTIVITY_LIMITS.map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setActivityLimit(n)}
-                className={cn(
-                  "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
-                  activityLimit === n
-                    ? "bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300"
-                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                )}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* Bloque 3: Actividad reciente (ancho completo) */}
         <Card className={`${cardBase} overflow-hidden`}>
-          <div className="overflow-x-auto">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-5 pt-5 pb-2">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+              Actividad reciente
+            </h3>
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-slate-500 dark:text-slate-400 mr-2">Mostrar:</span>
+              {ACTIVITY_LIMITS.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setActivityLimit(n)}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                    activityLimit === n
+                      ? "bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300"
+                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  )}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="overflow-x-auto px-5 pb-5 pt-0">
             <Table>
               <TableHead>
                 <TableRow>

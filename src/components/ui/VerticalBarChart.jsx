@@ -9,8 +9,8 @@ export function VerticalBarChart({ data, maxValue, valueFormat = (v) => String(v
 
   return (
     <div className="flex items-end justify-between gap-1 h-40">
-      {data.map(({ label, value }) => (
-        <div key={label} className="flex-1 flex flex-col items-center gap-1 min-w-0">
+      {data.map(({ label, value }, i) => (
+        <div key={`${label}-${i}`} className="flex-1 flex flex-col items-center gap-1 min-w-0">
           <div className="w-full flex flex-col justify-end h-32">
             <div
               className={barClassName + " w-full rounded-t transition-all duration-500 min-h-[4px]"}

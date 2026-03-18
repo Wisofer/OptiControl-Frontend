@@ -216,6 +216,7 @@ CRUD de productos de la óptica (monturas, lentes, accesorios).
       "marca": "Ray-Ban",
       "precio": 850,
       "stock": 12,
+      "stock_minimo": 5,
       "fecha_creacion": "2025-12-05"
     }
   ],
@@ -236,6 +237,7 @@ CRUD de productos de la óptica (monturas, lentes, accesorios).
 | marca | string | Marca |
 | precio | number | Precio unitario |
 | stock | number | Cantidad en inventario |
+| stock_minimo | number | Opcional. Umbral mínimo; cuando `stock` ≤ `stock_minimo` el frontend muestra aviso "Stock bajo". 0 = no definido. |
 | fecha_creacion | string | Fecha ISO o "YYYY-MM-DD" |
 
 ### POST `/api/products` – Body
@@ -247,11 +249,13 @@ CRUD de productos de la óptica (monturas, lentes, accesorios).
   "marca": "Ray-Ban",
   "precio": 850,
   "stock": 12,
+  "stock_minimo": 5,
   "fecha_creacion": "2025-12-05"
 }
 ```
 
 - **fecha_creacion** es opcional; si no se envía, el backend puede asignar la fecha actual.
+- **stock_minimo** es opcional; el frontend lo usa para mostrar aviso cuando el stock está en o por debajo de este valor (0 = sin aviso).
 
 ### PUT `/api/products/:id` – Body
 

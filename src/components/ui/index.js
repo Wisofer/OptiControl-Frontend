@@ -6,6 +6,7 @@ export { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell } fro
 export { TableSkeleton, CardListSkeleton } from "./TableSkeleton";
 export { BarChart } from "./BarChart";
 export { VerticalBarChart } from "./VerticalBarChart";
+export { PieChart } from "./PieChart";
 export { Modal } from "./Modal";
 export { Loader, PageLoader } from "./Loader";
 export { EmptyState } from "./EmptyState";

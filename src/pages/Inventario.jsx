@@ -29,6 +29,7 @@ const EMPTY_FORM = {
   precio_compra: "",
   precio: "",
   stock: "",
+  stock_minimo: "",
   descripcion: "",
   proveedor: "",
 };
@@ -58,6 +59,7 @@ export function Inventario() {
       precio_compra: p.precio_compra ?? "",
       precio: p.precio ?? "",
       stock: p.stock ?? "",
+      stock_minimo: p.stock_minimo ?? p.stockMinimo ?? "",
       descripcion: p.descripcion ?? "",
       proveedor: p.proveedor ?? "",
     });
@@ -74,6 +76,7 @@ export function Inventario() {
         precio_compra: Number(form.precio_compra) || 0,
         precio: Number(form.precio) || 0,
         stock: Number(form.stock) || 0,
+        stockMinimo: Number(form.stock_minimo) || 0,
         descripcion: (form.descripcion || "").trim(),
         proveedor: (form.proveedor || "").trim(),
       };
@@ -187,7 +190,14 @@ export function Inventario() {
                       <TableCell className="text-slate-600 dark:text-slate-300 max-w-[120px] truncate" title={p.proveedor || undefined}>{p.proveedor || "—"}</TableCell>
                       <TableCell className="text-right tabular-nums text-slate-600 dark:text-slate-400">{p.precio_compra != null && p.precio_compra !== "" ? formatCurrency(p.precio_compra) : "—"}</TableCell>
                       <TableCell className="text-right font-medium tabular-nums">{formatCurrency(p.precio)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{p.stock}</TableCell>
+                      <TableCell className="text-right">
+                        <span className="tabular-nums">{p.stock}</span>
+                        {(Number(p.stock_minimo ?? p.stockMinimo) || 0) > 0 && Number(p.stock) <= Number(p.stock_minimo ?? p.stockMinimo) && (
+                          <span className="ml-1.5 inline-flex items-center rounded-md bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200" title="Stock en o por debajo del mínimo">
+                            Bajo
+                          </span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <button
@@ -232,40 +242,41 @@ export function Inventario() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         title={editingId ? "Editar producto" : "Agregar producto"}
+        size="xl"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            label="Nombre del producto"
-            value={form.nombre_producto}
-            onChange={(e) => setForm((f) => ({ ...f, nombre_producto: e.target.value }))}
-            placeholder="Ej: Montura clásica negra"
-            required
-          />
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1.5">Tipo</label>
-            <select
-              value={form.tipo_producto}
-              onChange={(e) => setForm((f) => ({ ...f, tipo_producto: e.target.value }))}
-              className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5 text-slate-800 dark:text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-            >
-              {TIPOS_PRODUCTO.map((t) => (
-                <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
-              ))}
-            </select>
-          </div>
-          <Input
-            label="Marca"
-            value={form.marca}
-            onChange={(e) => setForm((f) => ({ ...f, marca: e.target.value }))}
-            placeholder="Ej: Ray-Ban"
-          />
-          <Input
-            label="Proveedor"
-            value={form.proveedor}
-            onChange={(e) => setForm((f) => ({ ...f, proveedor: e.target.value }))}
-            placeholder="Ej: Distribuidora Óptica"
-          />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Nombre del producto"
+              value={form.nombre_producto}
+              onChange={(e) => setForm((f) => ({ ...f, nombre_producto: e.target.value }))}
+              placeholder="Ej: Montura clásica negra"
+              required
+            />
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1.5">Tipo</label>
+              <select
+                value={form.tipo_producto}
+                onChange={(e) => setForm((f) => ({ ...f, tipo_producto: e.target.value }))}
+                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5 text-slate-800 dark:text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+              >
+                {TIPOS_PRODUCTO.map((t) => (
+                  <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+                ))}
+              </select>
+            </div>
+            <Input
+              label="Marca"
+              value={form.marca}
+              onChange={(e) => setForm((f) => ({ ...f, marca: e.target.value }))}
+              placeholder="Ej: Ray-Ban"
+            />
+            <Input
+              label="Proveedor"
+              value={form.proveedor}
+              onChange={(e) => setForm((f) => ({ ...f, proveedor: e.target.value }))}
+              placeholder="Ej: Distribuidora Óptica"
+            />
             <Input
               label="Precio de compra (C$)"
               type="number"
@@ -285,8 +296,6 @@ export function Inventario() {
               required
               placeholder="Precio al público"
             />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
             <Input
               label="Stock"
               type="number"
@@ -294,6 +303,14 @@ export function Inventario() {
               value={form.stock}
               onChange={(e) => setForm((f) => ({ ...f, stock: e.target.value }))}
               required
+            />
+            <Input
+              label="Stock mínimo"
+              type="number"
+              min="0"
+              value={form.stock_minimo}
+              onChange={(e) => setForm((f) => ({ ...f, stock_minimo: e.target.value }))}
+              placeholder="Avisar cuando quede menos de..."
             />
           </div>
           <div>
@@ -304,11 +321,11 @@ export function Inventario() {
               value={form.descripcion}
               onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))}
               placeholder="Ej: Montura metálica, material resistente."
-              rows={3}
-              className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 resize-y min-h-[80px]"
+              rows={2}
+              className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 resize-y min-h-[72px]"
             />
           </div>
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
             <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>
               Cancelar
             </Button>

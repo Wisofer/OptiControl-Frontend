@@ -267,6 +267,15 @@ export function getStaticResponse(pathname, method = "GET", body) {
 
   // Products (inventario)
   if (path.includes("/api/products")) {
+    if (method === "GET" && path.endsWith("/low-stock")) {
+      const low = memoryProducts
+        .filter((p) => {
+          const min = Number(p.stock_minimo ?? p.stockMinimo ?? 0);
+          return min > 0 && (Number(p.stock) || 0) < min;
+        })
+        .sort((a, b) => (Number(a.stock) || 0) - (Number(b.stock) || 0));
+      return Promise.resolve(Array.isArray(low) ? low : []);
+    }
     const match = path.match(/\/api\/products\/(\d+)/);
     if (method === "DELETE" && match) {
       memoryProducts = memoryProducts.filter((p) => String(p.id) !== match[1]);

@@ -40,6 +40,18 @@ export function Ventas() {
   const subtotal = useMemo(() => cart.reduce((a, it) => a + (it.subtotal || 0), 0), [cart]);
   const total = subtotal;
 
+  /** Total en córdobas (siempre). */
+  const totalCordobas = total;
+
+  /** Total en dólares cuando la moneda de pago es USD (conversión con tipo de cambio). */
+  const totalDolares = useMemo(
+    () => (exchangeRate > 0 ? totalCordobas / exchangeRate : 0),
+    [totalCordobas, exchangeRate]
+  );
+
+  /** Total a mostrar según moneda seleccionada (valor numérico en esa moneda). */
+  const totalAPagar = moneda === "USD" ? totalDolares : totalCordobas;
+
   const montoNum = useMemo(() => {
     const raw = String(montoRecibido).replace(",", ".").trim();
     const n = parseFloat(raw);
@@ -47,13 +59,16 @@ export function Ventas() {
   }, [montoRecibido]);
 
   const vuelto = useMemo(() => {
-    if (montoNum <= 0 || montoNum < total) return null;
-    const vueltoEnMonedaPago = montoNum - total;
+    if (montoNum <= 0) return null;
     if (moneda === "USD") {
-      return { cordobas: vueltoEnMonedaPago * exchangeRate, dolares: vueltoEnMonedaPago };
+      if (montoNum < totalDolares) return null;
+      const vueltoDolares = montoNum - totalDolares;
+      const vueltoCordobas = vueltoDolares * exchangeRate;
+      return { cordobas: vueltoCordobas, dolares: vueltoDolares };
     }
-    return { cordobas: vueltoEnMonedaPago, dolares: null };
-  }, [montoNum, total, moneda, exchangeRate]);
+    if (montoNum < totalCordobas) return null;
+    return { cordobas: montoNum - totalCordobas, dolares: null };
+  }, [montoNum, moneda, totalCordobas, totalDolares, exchangeRate]);
 
   const cartItemKey = (it) => (it.type === "service" ? `s-${it.serviceId}` : `p-${it.productId}`);
 
@@ -165,25 +180,31 @@ export function Ventas() {
         }
         return { ...base, productId: it.productId, productName: it.productName };
       });
-      const amountPaid = montoNum;
+      const amountPaidEnMonedaPago = montoNum;
+      const amountPaidCordobas = moneda === "USD" ? amountPaidEnMonedaPago * exchangeRate : amountPaidEnMonedaPago;
+      const totalPagadoParaRegistro = amountPaidCordobas >= totalCordobas ? totalCordobas : amountPaidCordobas;
       await salesApi.create({
         clientId: selectedClient.id,
         clientName: selectedClient.name,
         items,
-        total,
-        amountPaid: amountPaid >= total ? total : amountPaid,
+        total: totalCordobas,
+        amountPaid: totalPagadoParaRegistro,
         paymentMethod: tipoPago,
         currency: moneda,
       });
-      const isPartial = amountPaid > 0 && amountPaid < total;
-      snackbar.success(isPartial ? `Venta registrada. Pendiente: ${formatCurrency(total - amountPaid, moneda)}` : "Venta registrada correctamente");
+      const isPartial = amountPaidEnMonedaPago > 0 && amountPaidEnMonedaPago < totalAPagar;
+      const pendiente = totalAPagar - amountPaidEnMonedaPago;
+      snackbar.success(isPartial ? `Venta registrada. Pendiente: ${formatCurrency(pendiente, moneda)}` : "Venta registrada correctamente");
       setSaleForPrintCard({
         clientName: selectedClient.name,
         items: cart.map((it) => ({ productName: getItemDisplayName(it), quantity: it.quantity, subtotal: it.subtotal })),
-        total,
-        amountPaid,
+        total: totalCordobas,
+        totalAPagarEnMoneda: totalAPagar,
+        amountPaid: amountPaidEnMonedaPago,
+        amountPaidCordobas,
         moneda,
         tipoPago,
+        exchangeRate,
       });
       setSelectedClientId("");
       setCart([]);
@@ -197,11 +218,12 @@ export function Ventas() {
   const handlePrintInvoice = () => {
     if (!saleForPrintCard) return;
     const companyName = settings?.companyName?.trim() || "OptiControl";
+    const rate = Number(saleForPrintCard.exchangeRate) || 36.8;
     const itemsRows = saleForPrintCard.items
-      .map(
-        (it) =>
-          `<tr><td>${(it.productName || "").replace(/</g, "&lt;")}</td><td align="right">${it.quantity}</td><td align="right">${formatCurrency(it.subtotal, saleForPrintCard.moneda)}</td></tr>`
-      )
+      .map((it) => {
+        const subtotalEnMoneda = saleForPrintCard.moneda === "USD" ? it.subtotal / rate : it.subtotal;
+        return `<tr><td>${(it.productName || "").replace(/</g, "&lt;")}</td><td align="right">${it.quantity}</td><td align="right">${formatCurrency(subtotalEnMoneda, saleForPrintCard.moneda)}</td></tr>`;
+      })
       .join("");
     const html = `
 <!DOCTYPE html>
@@ -217,7 +239,7 @@ export function Ventas() {
 <thead><tr><th>Producto</th><th align="right">Cant.</th><th align="right">Subtotal</th></tr></thead>
 <tbody>${itemsRows}</tbody>
 </table>
-<p class="total">Total: ${formatCurrency(saleForPrintCard.total, saleForPrintCard.moneda)}</p>
+<p class="total">Total: ${formatCurrency(saleForPrintCard.totalAPagarEnMoneda ?? saleForPrintCard.total, saleForPrintCard.moneda)}</p>
 <p style="margin-top:2rem;font-size:0.875rem;color:#666;">Gracias por su compra.</p>
 </body></html>`;
     const w = window.open("", "_blank");
@@ -489,7 +511,7 @@ export function Ventas() {
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Total a pagar</span>
                     <span className="text-xl font-bold tabular-nums text-primary-600 dark:text-primary-400">
-                      {formatCurrency(total, moneda)}
+                      {formatCurrency(totalAPagar, moneda)}
                     </span>
                   </div>
                   <div>
@@ -527,9 +549,9 @@ export function Ventas() {
                       )}
                     </div>
                   )}
-                  {montoRecibido.trim() !== "" && montoNum > 0 && montoNum < total && (
+                  {montoRecibido.trim() !== "" && montoNum > 0 && montoNum < totalAPagar && (
                     <p className="text-xs text-amber-600 dark:text-amber-400">
-                      Quedará pendiente: {formatCurrency(total - montoNum, moneda)}
+                      Quedará pendiente: {formatCurrency(totalAPagar - montoNum, moneda)}
                     </p>
                   )}
                   <div className="flex gap-2">
@@ -575,7 +597,7 @@ export function Ventas() {
                 Cliente: {saleForPrintCard.clientName}
               </p>
               <p className="text-sm text-slate-600 dark:text-slate-400">
-                Total: {formatCurrency(saleForPrintCard.total, saleForPrintCard.moneda)} · {saleForPrintCard.tipoPago}
+                Total: {formatCurrency(saleForPrintCard.totalAPagarEnMoneda ?? saleForPrintCard.total, saleForPrintCard.moneda)} · {saleForPrintCard.tipoPago}
               </p>
             </div>
             <div className="flex gap-3 pt-2">
