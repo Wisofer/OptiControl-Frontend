@@ -81,6 +81,7 @@ function DashboardSkeleton() {
 export function Dashboard() {
   const { summary, activity, monthlyIncome, topProducts, alerts, loading, error } = useDashboard();
   const [activityLimit, setActivityLimit] = useState(5);
+  const [salesChartOrientation, setSalesChartOrientation] = useState("horizontal");
 
   if (loading) return <DashboardSkeleton />;
   if (error) {
@@ -96,7 +97,11 @@ export function Dashboard() {
   const salesMonth = summary?.salesMonth ?? 0;
   const productsCount = summary?.productsCount ?? 0;
   const clientsCount = summary?.clientsCount ?? 0;
-  const monthlyChartData = (monthlyIncome || []).map((m) => ({ label: m.monthName || m.month || "", value: m.amount || 0 }));
+  // La gráfica debe iniciar en el primer mes con ingreso real.
+  // "Ingreso" incluye abonos de ventas en estado pendiente (si el backend los suma al monto mensual).
+  const monthlyChartDataRaw = (monthlyIncome || []).map((m) => ({ label: m.monthName || m.month || "", value: m.amount || 0 }));
+  const firstNonZeroIdx = monthlyChartDataRaw.findIndex((m) => Number(m.value) > 0);
+  const monthlyChartData = firstNonZeroIdx === -1 ? [] : monthlyChartDataRaw.slice(firstNonZeroIdx);
   const pieChartData = (topProducts || []).slice(0, 8).map((p) => ({ label: p.name || "Sin nombre", value: p.quantity || 0 }));
 
   const cardBase =
@@ -185,13 +190,45 @@ export function Dashboard() {
         {/* Bloque 1: Ventas mensuales (ancho completo) */}
         <Card className={`${cardBase} overflow-hidden`}>
           <div className="px-5 pt-5 pb-2">
-            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Ventas mensuales</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Últimos meses</p>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Ventas mensuales</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Últimos meses</p>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setSalesChartOrientation("horizontal")}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                    salesChartOrientation === "horizontal"
+                      ? "bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300"
+                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  )}
+                >
+                  Horizontal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSalesChartOrientation("vertical")}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                    salesChartOrientation === "vertical"
+                      ? "bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300"
+                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  )}
+                >
+                  Vertical
+                </button>
+              </div>
+            </div>
           </div>
           <div className="px-5 pb-5 pt-2">
             {monthlyChartData.length > 0 ? (
               <VerticalBarChart
                 data={monthlyChartData}
+                orientation={salesChartOrientation}
                 valueFormat={(v) => formatCurrency(v)}
                 barClassName="bg-primary-500 hover:bg-primary-600 dark:bg-primary-500 dark:hover:bg-primary-400"
               />

@@ -118,11 +118,13 @@ function monthlyIncomeFromSales() {
   });
   const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
   const now = new Date();
+  // "Últimos meses" debe mostrarse en orden cronológico (izq -> der),
+  // por eso no se invierte el array al final.
   return [2, 1, 0].map((i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     return { month: months[d.getMonth()], monthName: months[d.getMonth()], amount: byMonth[key] || 0 };
-  }).reverse();
+  });
 }
 
 function topProductsSold() {

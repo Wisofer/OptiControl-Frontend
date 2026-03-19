@@ -70,8 +70,15 @@ async function printInvoice(inv, snackbar) {
     const blobUrl = URL.createObjectURL(blob);
     const w = window.open(blobUrl, "_blank");
     if (!w) {
-      URL.revokeObjectURL(blobUrl);
-      snackbar.error("Permite ventanas emergentes para imprimir.");
+      // Fallback: si el popup está bloqueado, forzamos descarga usando el Blob.
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `Factura_${inv.id || "INV"}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+      snackbar.success("Descarga iniciada. Si quieres imprimir, abre el PDF y usa Ctrl+P.");
       return;
     }
     const tryPrint = () => {
