@@ -8,6 +8,7 @@ import { useSettings } from "../hooks/useSettings";
 import { useSnackbar } from "../contexts/SnackbarContext";
 import { formatCurrency } from "../utils/format";
 import { salesApi } from "../api/sales.js";
+import { getToken } from "../api/token.js";
 import { cn } from "../utils/cn";
 
 const TAB_PRODUCTOS = "productos";
@@ -183,7 +184,7 @@ export function Ventas() {
       const amountPaidEnMonedaPago = montoNum;
       const amountPaidCordobas = moneda === "USD" ? amountPaidEnMonedaPago * exchangeRate : amountPaidEnMonedaPago;
       const totalPagadoParaRegistro = amountPaidCordobas >= totalCordobas ? totalCordobas : amountPaidCordobas;
-      await salesApi.create({
+      const createdSale = await salesApi.create({
         clientId: selectedClient.id,
         clientName: selectedClient.name,
         items,
@@ -196,6 +197,10 @@ export function Ventas() {
       const pendiente = totalAPagar - amountPaidEnMonedaPago;
       snackbar.success(isPartial ? `Venta registrada. Pendiente: ${formatCurrency(pendiente, moneda)}` : "Venta registrada correctamente");
       setSaleForPrintCard({
+        status: createdSale?.status || (isPartial ? "pendiente" : "Pagada"),
+        saleTicketPdfUrl: createdSale?.saleTicketPdfUrl ?? null,
+        invoiceId: createdSale?.invoiceId ?? null,
+        invoicePdfUrl: createdSale?.invoicePdfUrl ?? null,
         clientName: selectedClient.name,
         items: cart.map((it) => ({ productName: getItemDisplayName(it), quantity: it.quantity, subtotal: it.subtotal })),
         total: totalCordobas,
@@ -215,8 +220,64 @@ export function Ventas() {
     setRegistering(false);
   };
 
-  const handlePrintInvoice = () => {
+  const openPdfUrl = async (pdfUrl, errorMessage) => {
+    if (!pdfUrl) return false;
+    try {
+      const token = getToken();
+      const res = await fetch(pdfUrl, {
+        method: "GET",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          snackbar.error("Sesión expirada o no autorizada para abrir este PDF.");
+          return false;
+        }
+        snackbar.error(`No se pudo abrir el PDF (HTTP ${res.status}).`);
+        return false;
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const w = window.open(blobUrl, "_blank", "noopener,noreferrer");
+      if (!w) {
+        URL.revokeObjectURL(blobUrl);
+        snackbar.error(errorMessage || "Permite ventanas emergentes para abrir el PDF.");
+        return false;
+      }
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+      setSaleForPrintCard(null);
+      return true;
+    } catch (_) {
+      snackbar.error("Error de red al abrir el PDF.");
+      return false;
+    }
+  };
+
+  const handlePrintTicket = async () => {
     if (!saleForPrintCard) return;
+    const opened = await openPdfUrl(
+      saleForPrintCard.saleTicketPdfUrl,
+      "Permite ventanas emergentes para abrir el ticket en PDF."
+    );
+    if (!opened) {
+      await handlePrintInvoice();
+    }
+  };
+
+  const openBackendInvoicePdf = async () => {
+    if (!saleForPrintCard?.invoicePdfUrl) return false;
+    return openPdfUrl(
+      saleForPrintCard.invoicePdfUrl,
+      "Permite ventanas emergentes para abrir la factura en PDF."
+    );
+  };
+
+  const handlePrintInvoice = async () => {
+    if (!saleForPrintCard) return;
+    if (saleForPrintCard.invoicePdfUrl) {
+      const opened = await openBackendInvoicePdf();
+      if (opened) return;
+    }
     const companyName = settings?.companyName?.trim() || "OptiControl";
     const rate = Number(saleForPrintCard.exchangeRate) || 36.8;
     const itemsRows = saleForPrintCard.items
@@ -590,7 +651,9 @@ export function Ventas() {
         {saleForPrintCard && (
           <div className="space-y-4">
             <p className="text-slate-600 dark:text-slate-300">
-              ¿Quieres imprimir la factura?
+              {saleForPrintCard.saleTicketPdfUrl
+                ? "Ticket PDF backend disponible (80mm)."
+                : "No se recibió ticket PDF backend; puedes usar impresión local."}
             </p>
             <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 p-4 space-y-2">
               <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
@@ -599,15 +662,23 @@ export function Ventas() {
               <p className="text-sm text-slate-600 dark:text-slate-400">
                 Total: {formatCurrency(saleForPrintCard.totalAPagarEnMoneda ?? saleForPrintCard.total, saleForPrintCard.moneda)} · {saleForPrintCard.tipoPago}
               </p>
+              {saleForPrintCard.invoiceId && (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Factura: {saleForPrintCard.invoiceId}
+                </p>
+              )}
             </div>
             <div className="flex gap-3 pt-2">
-              <Button
-                onClick={handlePrintInvoice}
-                className="flex-1 inline-flex items-center justify-center gap-2"
-              >
+              <Button onClick={handlePrintTicket} className="flex-1 inline-flex items-center justify-center gap-2">
                 <FileText className="h-4 w-4" />
-                Imprimir factura
+                Imprimir ticket
               </Button>
+              {saleForPrintCard.invoicePdfUrl && (
+                <Button onClick={handlePrintInvoice} variant="secondary" className="flex-1 inline-flex items-center justify-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Imprimir factura
+                </Button>
+              )}
               <Button variant="secondary" onClick={() => setSaleForPrintCard(null)}>
                 No, gracias
               </Button>

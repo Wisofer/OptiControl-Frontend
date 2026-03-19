@@ -57,5 +57,15 @@ export function useSalesHistory(pageSize = DEFAULT_PAGE_SIZE) {
     await fetchList();
   }, [fetchList]);
 
-  return { sales, loading, error, totalCount, totalPages, page, pageSize, setPage, refetch: fetchList, cancel, addPayment };
+  const createOrReuseInvoice = useCallback(async (id) => {
+    const result = await salesHistoryApi.createOrReuseInvoice(id);
+    await fetchList();
+    return result;
+  }, [fetchList]);
+
+  const getTicketPdfUrl = useCallback(async (id) => {
+    return salesHistoryApi.ticketPdfUrl(id);
+  }, []);
+
+  return { sales, loading, error, totalCount, totalPages, page, pageSize, setPage, refetch: fetchList, cancel, addPayment, createOrReuseInvoice, getTicketPdfUrl };
 }

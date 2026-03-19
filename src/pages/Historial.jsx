@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { History, Eye, Printer, Ban, PlusCircle, MessageCircle } from "lucide-react";
+import { History, Eye, Printer, Ban, PlusCircle, MessageCircle, FileText } from "lucide-react";
 import {
   Card,
   Table,
@@ -18,11 +18,12 @@ import {
 import { useSalesHistory } from "../hooks/useSalesHistory";
 import { useSettings } from "../hooks/useSettings";
 import { useSnackbar } from "../contexts/SnackbarContext";
+import { getToken } from "../api/token.js";
 import { formatCurrency, formatDate } from "../utils/format";
 import { cn } from "../utils/cn";
 
 export function Historial() {
-  const { sales, loading, error, totalCount, totalPages, page, pageSize, setPage, cancel, addPayment } = useSalesHistory();
+  const { sales, loading, error, totalCount, totalPages, page, pageSize, setPage, cancel, addPayment, createOrReuseInvoice, getTicketPdfUrl } = useSalesHistory();
   const { settings } = useSettings();
   const snackbar = useSnackbar();
   const [detailSale, setDetailSale] = useState(null);
@@ -40,10 +41,45 @@ export function Historial() {
     return `${items.length} ítems`;
   };
 
-  const handlePrintFactura = (sale) => {
+  const openPdfUrl = async (pdfUrl) => {
+    if (!pdfUrl) return false;
+    try {
+      const token = getToken();
+      const res = await fetch(pdfUrl, {
+        method: "GET",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          snackbar.error("Sesión expirada o no autorizada para abrir este PDF.");
+          return false;
+        }
+        snackbar.error(`No se pudo abrir el PDF (HTTP ${res.status}).`);
+        return false;
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const w = window.open(blobUrl, "_blank", "noopener,noreferrer");
+      if (!w) {
+        URL.revokeObjectURL(blobUrl);
+        snackbar.error("Permite ventanas emergentes para abrir el PDF.");
+        return false;
+      }
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+      return true;
+    } catch (_) {
+      snackbar.error("Error de red al abrir el PDF.");
+      return false;
+    }
+  };
+
+  const renderAndPrintLocal = (sale) => {
     if (!sale) return;
     const companyName = settings?.companyName?.trim() || "OptiControl";
     const moneda = sale.currency || "NIO";
+    const isQuote = (sale.status || "").toLowerCase() === "cotizacion";
+    const documentTitle = isQuote ? "Cotización" : "Factura / Recibo";
+    const footerText = isQuote ? "Documento de cotización." : "Gracias por su compra.";
     const items = sale.items || [];
     const itemsRows = items
       .map(
@@ -54,11 +90,11 @@ export function Historial() {
     const fecha = sale.date ? new Date(sale.date).toLocaleString("es-NI") : "—";
     const html = `
 <!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Factura ${sale.id || ""}</title>
+<html><head><meta charset="utf-8"><title>${documentTitle} ${sale.id || ""}</title>
 <style>body{font-family:system-ui,sans-serif;max-width:400px;margin:2rem auto;padding:1rem;} table{width:100%;border-collapse:collapse;} th,td{border-bottom:1px solid #eee;padding:6px 0;} th{text-align:left;} .total{font-size:1.25rem;font-weight:bold;margin-top:1rem;}</style>
 </head><body>
 <h2>${companyName.replace(/</g, "&lt;")}</h2>
-<p><strong>Factura / Recibo</strong></p>
+<p><strong>${documentTitle}</strong></p>
 <p>Cliente: ${(sale.clientName || "").replace(/</g, "&lt;")}</p>
 <p>Fecha: ${fecha}</p>
 <p>Forma de pago: ${(sale.paymentMethod || "Efectivo").replace(/</g, "&lt;")}</p>
@@ -67,7 +103,7 @@ export function Historial() {
 <tbody>${itemsRows}</tbody>
 </table>
 <p class="total">Total: ${formatCurrency(sale.total ?? 0, moneda)}</p>
-<p style="margin-top:2rem;font-size:0.875rem;color:#666;">Gracias por su compra.</p>
+<p style="margin-top:2rem;font-size:0.875rem;color:#666;">${footerText}</p>
 </body></html>`;
     const w = window.open("", "_blank");
     if (w) {
@@ -81,14 +117,48 @@ export function Historial() {
     }
   };
 
+  const handlePrintTicket = async (sale) => {
+    if (!sale) return;
+    if (await openPdfUrl(sale.saleTicketPdfUrl)) return;
+    try {
+      const res = await getTicketPdfUrl(sale.id);
+      if (await openPdfUrl(res?.pdfUrl)) return;
+    } catch (_) {
+      // Si no hay ticket backend, usamos el render local.
+    }
+    renderAndPrintLocal(sale);
+  };
+
+  const handlePrintInvoice = async (sale) => {
+    if (!sale) return;
+    if (isCotizacion(sale) || isCancelada(sale)) {
+      handlePrintTicket(sale);
+      return;
+    }
+    if (await openPdfUrl(sale.invoicePdfUrl)) return;
+    try {
+      const inv = await createOrReuseInvoice(sale.id);
+      if (await openPdfUrl(inv?.pdfUrl)) {
+        if (inv?.reused) snackbar.success("Se reutilizó la factura existente.");
+        return;
+      }
+    } catch (_) {
+      // Si el backend no puede generar/reusar factura, seguimos con el flujo local.
+    }
+    renderAndPrintLocal(sale);
+  };
+
   const handleWhatsAppFactura = (sale) => {
     if (!sale) return;
     const companyName = settings?.companyName?.trim() || "OptiControl";
     const moneda = sale.currency || "NIO";
+    const isQuote = (sale.status || "").toLowerCase() === "cotizacion";
+    const documentTitle = isQuote ? "Cotización" : "Factura / Recibo";
+    const footerText = isQuote ? "Documento de cotización." : "Gracias por su compra.";
     const fecha = sale.date ? new Date(sale.date).toLocaleString("es-NI") : "—";
     const lines = [
       `*${companyName}*`,
-      "Factura / Recibo",
+      documentTitle,
       "",
       `Cliente: ${sale.clientName || "—"}`,
       `Fecha: ${fecha}`,
@@ -102,7 +172,7 @@ export function Historial() {
       "",
       `*Total: ${formatCurrency(sale.total ?? 0, moneda)}*`,
       "",
-      "Gracias por su compra.",
+      footerText,
     ];
     const text = lines.join("\n");
     const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
@@ -222,7 +292,7 @@ export function Historial() {
                             isPagada(s) && "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
                             isPendiente(s) && "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
                             isCotizacion(s) && "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
-                            isCancelada(s) && "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
+                            isCancelada(s) && "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300"
                           )}
                         >
                           {getStatusLabel(s)}
@@ -242,17 +312,27 @@ export function Historial() {
                             <>
                               <button
                                 type="button"
-                                onClick={() => handlePrintFactura(s)}
+                                onClick={() => handlePrintTicket(s)}
                                 className="rounded-lg p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                                title={isCotizacion(s) ? "Imprimir cotización" : "Imprimir factura"}
+                                title={isCotizacion(s) ? "Imprimir ticket de cotización" : "Imprimir ticket"}
                               >
                                 <Printer className="h-4 w-4" />
                               </button>
+                              {!isCotizacion(s) && !isCancelada(s) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handlePrintInvoice(s)}
+                                  className="rounded-lg p-2 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+                                  title="Imprimir factura"
+                                >
+                                  <FileText className="h-4 w-4" />
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => handleWhatsAppFactura(s)}
                                 className="rounded-lg p-2 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
-                                title="Enviar factura por WhatsApp"
+                                title={isCotizacion(s) ? "Enviar cotización por WhatsApp" : "Enviar factura por WhatsApp"}
                               >
                                 <MessageCircle className="h-4 w-4" />
                               </button>
