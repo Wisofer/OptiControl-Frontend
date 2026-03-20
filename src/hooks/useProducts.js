@@ -77,6 +77,12 @@ export function useProducts(searchParam = "", pageSize = DEFAULT_PAGE_SIZE) {
     setTotalCount((c) => Math.max(0, c - 1));
   }, []);
 
+  const restock = useCallback(async (id, cantidad) => {
+    const updated = await productsApi.restock(id, cantidad);
+    setProducts((prev) => prev.map((p) => (String(p.id) === String(id) ? updated : p)));
+    return updated;
+  }, []);
+
   return {
     products,
     loading,
@@ -90,5 +96,6 @@ export function useProducts(searchParam = "", pageSize = DEFAULT_PAGE_SIZE) {
     create,
     update,
     remove,
+    restock,
   };
 }

@@ -158,6 +158,17 @@ export function Login() {
             <p className="mt-6 text-center text-slate-500 text-xs">
               ¿Problemas para entrar? Contacta al administrador.
             </p>
+            <p className="mt-2 text-center text-slate-500 text-xs">
+              Desarrollado por{" "}
+              <a
+                href="https://www.cowib.es"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-primary-600 hover:text-primary-700 hover:underline"
+              >
+                COWIB
+              </a>
+            </p>
           </div>
         </div>
       </div>

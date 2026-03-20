@@ -36,6 +36,14 @@ export const productsApi = {
   create: (body) => api.post(base, toProductBodyCamel(body)),
   update: (id, body) => api.put(`${base}/${id}`, { ...toProductBodyCamel(body, true), id }),
   delete: (id) => api.delete(`${base}/${id}`),
-  /** Productos con stock por debajo del mínimo (para alertas/widget). */
+  /** Suma cantidad al stock actual (entero > 0). */
+  restock: (id, cantidad) => {
+    const n = Math.floor(Number(cantidad));
+    if (!Number.isFinite(n) || n < 1) {
+      return Promise.reject(new Error("La cantidad debe ser un entero mayor que 0."));
+    }
+    return api.post(`${base}/${id}/restock`, { cantidad: n });
+  },
+  /** Productos con stock en o por debajo del mínimo (banner / alertas). */
   lowStock: () => api.get(`${base}/low-stock`),
 };

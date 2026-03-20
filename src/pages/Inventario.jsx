@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Package, Plus, Pencil, Trash2, Search } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Package, Plus, Pencil, Trash2, Search, AlertTriangle, PackagePlus } from "lucide-react";
 import {
   Card,
   Table,
@@ -15,12 +15,22 @@ import {
   TableSkeleton,
   Pagination,
   Input,
+  Badge,
 } from "../components/ui";
 import { useProducts } from "../hooks/useProducts";
 import { useToggle } from "../hooks/useToggle";
 import { useSnackbar } from "../contexts/SnackbarContext";
 import { formatCurrency } from "../utils/format";
+import { cn } from "../utils/cn";
 import { TIPOS_PRODUCTO } from "../constants/productTypes.js";
+import { isProductStockBajo } from "../utils/productStock.js";
+import { productsApi } from "../api/products.js";
+
+function normalizeLowStockResponse(data) {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object" && Array.isArray(data.items)) return data.items;
+  return [];
+}
 
 const EMPTY_FORM = {
   nombre_producto: "",
@@ -36,13 +46,35 @@ const EMPTY_FORM = {
 
 export function Inventario() {
   const [search, setSearch] = useState("");
-  const { products, loading, error, totalCount, totalPages, page, pageSize, setPage, create, update, remove } = useProducts(search);
+  const { products, loading, error, totalCount, totalPages, page, pageSize, setPage, refetch, create, update, remove, restock } =
+    useProducts(search);
   const snackbar = useSnackbar();
   const [modalOpen, setModalOpen] = useToggle(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [lowStockProducts, setLowStockProducts] = useState([]);
+  const [lowStockLoading, setLowStockLoading] = useState(false);
+  const [restockTarget, setRestockTarget] = useState(null);
+  const [restockCantidad, setRestockCantidad] = useState("1");
+  const [restockLoading, setRestockLoading] = useState(false);
+
+  const loadLowStock = useCallback(async () => {
+    setLowStockLoading(true);
+    try {
+      const data = await productsApi.lowStock();
+      setLowStockProducts(normalizeLowStockResponse(data));
+    } catch {
+      setLowStockProducts([]);
+    } finally {
+      setLowStockLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadLowStock();
+  }, [loadLowStock]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -91,6 +123,7 @@ export function Inventario() {
       }
       setForm(EMPTY_FORM);
       setModalOpen(false);
+      await loadLowStock();
     } catch (err) {
       snackbar.error(err?.message || "Error al guardar el producto");
     }
@@ -103,10 +136,37 @@ export function Inventario() {
       await remove(deleteTarget.id);
       setDeleteTarget(null);
       snackbar.success("Producto eliminado");
+      await loadLowStock();
     } catch (err) {
       snackbar.error(err?.message || "Error al eliminar");
     }
     setDeleteLoading(false);
+  };
+
+  const openRestock = (p) => {
+    setRestockTarget({ id: p.id, name: p.nombre_producto });
+    setRestockCantidad("1");
+  };
+
+  const handleRestockSubmit = async (e) => {
+    e.preventDefault();
+    if (!restockTarget) return;
+    const n = parseInt(String(restockCantidad).trim(), 10);
+    if (!Number.isFinite(n) || n < 1) {
+      snackbar.error("Indica una cantidad entera mayor que 0.");
+      return;
+    }
+    setRestockLoading(true);
+    try {
+      await restock(restockTarget.id, n);
+      snackbar.success("Stock actualizado");
+      setRestockTarget(null);
+      setRestockCantidad("1");
+      await loadLowStock();
+    } catch (err) {
+      snackbar.error(err?.message || "Error al reponer inventario");
+    }
+    setRestockLoading(false);
   };
 
   return (
@@ -131,6 +191,43 @@ export function Inventario() {
         <p className="text-sm text-red-600 dark:text-red-400" role="alert">
           {error}
         </p>
+      )}
+
+      {(lowStockLoading || lowStockProducts.length > 0) && (
+        <div
+          className={cn(
+            "rounded-xl border px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2",
+            lowStockProducts.length > 0
+              ? "border-amber-200 bg-amber-50/90 dark:border-amber-800 dark:bg-amber-950/35"
+              : "border-slate-200 bg-slate-50/80 dark:border-slate-700 dark:bg-slate-900/40"
+          )}
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-start gap-2">
+            <AlertTriangle
+              className={cn(
+                "h-5 w-5 shrink-0 mt-0.5",
+                lowStockProducts.length > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-400"
+              )}
+            />
+            <div>
+              <p className="font-medium text-slate-800 dark:text-slate-100">Productos por reponer</p>
+              {lowStockLoading ? (
+                <p className="text-sm text-slate-600 dark:text-slate-400">Cargando…</p>
+              ) : (
+                <p className="text-sm text-amber-900/90 dark:text-amber-100/90">
+                  {lowStockProducts.length} producto(s) con stock en o por debajo del mínimo.
+                </p>
+              )}
+            </div>
+          </div>
+          {!lowStockLoading && lowStockProducts.length > 0 && (
+            <Button type="button" variant="secondary" className="shrink-0" onClick={() => refetch()}>
+              Actualizar tabla
+            </Button>
+          )}
+        </div>
       )}
 
       <Card>
@@ -176,14 +273,22 @@ export function Inventario() {
                     <TableHeaderCell className="text-right">P. compra</TableHeaderCell>
                     <TableHeaderCell className="text-right">Precio</TableHeaderCell>
                     <TableHeaderCell className="text-right">Stock</TableHeaderCell>
-                    <TableHeaderCell className="w-28">Acciones</TableHeaderCell>
+                    <TableHeaderCell className="w-36">Acciones</TableHeaderCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {products.map((p) => (
-                    <TableRow key={p.id}>
+                    <TableRow
+                      key={p.id}
+                      className={cn(isProductStockBajo(p) && "bg-amber-50/80 dark:bg-amber-950/20")}
+                    >
                       <TableCell className="font-medium text-slate-800 dark:text-slate-100" title={p.descripcion || undefined}>
-                        {p.nombre_producto}
+                        <span className="inline-flex items-center gap-2">
+                          {isProductStockBajo(p) && (
+                            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" aria-hidden />
+                          )}
+                          {p.nombre_producto}
+                        </span>
                       </TableCell>
                       <TableCell className="capitalize text-slate-600 dark:text-slate-300">{p.tipo_producto}</TableCell>
                       <TableCell className="text-slate-600 dark:text-slate-300">{p.marca}</TableCell>
@@ -192,14 +297,22 @@ export function Inventario() {
                       <TableCell className="text-right font-medium tabular-nums">{formatCurrency(p.precio)}</TableCell>
                       <TableCell className="text-right">
                         <span className="tabular-nums">{p.stock}</span>
-                        {(Number(p.stock_minimo ?? p.stockMinimo) || 0) > 0 && Number(p.stock) <= Number(p.stock_minimo ?? p.stockMinimo) && (
-                          <span className="ml-1.5 inline-flex items-center rounded-md bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200" title="Stock en o por debajo del mínimo">
+                        {isProductStockBajo(p) && (
+                          <Badge variant="warning" className="ml-2">
                             Bajo
-                          </span>
+                          </Badge>
                         )}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-0.5 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => openRestock(p)}
+                            className="rounded-lg p-2 text-slate-500 dark:text-slate-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors"
+                            title="Reponer inventario"
+                          >
+                            <PackagePlus className="h-4 w-4" />
+                          </button>
                           <button
                             type="button"
                             onClick={() => openEdit(p)}
@@ -332,6 +445,39 @@ export function Inventario() {
             <Button type="submit">{editingId ? "Guardar cambios" : "Agregar producto"}</Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        open={!!restockTarget}
+        onClose={() => !restockLoading && setRestockTarget(null)}
+        title="Reponer inventario"
+        size="sm"
+      >
+        {restockTarget && (
+          <form onSubmit={handleRestockSubmit} className="space-y-4">
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Sumar unidades al stock de <span className="font-medium text-slate-800 dark:text-slate-100">{restockTarget.name}</span> (no reemplaza el total).
+            </p>
+            <Input
+              label="Cantidad a ingresar"
+              type="number"
+              min="1"
+              step="1"
+              required
+              value={restockCantidad}
+              onChange={(e) => setRestockCantidad(e.target.value)}
+              placeholder="Ej: 10"
+            />
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+              <Button type="button" variant="secondary" disabled={restockLoading} onClick={() => setRestockTarget(null)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={restockLoading}>
+                {restockLoading ? "Guardando…" : "Confirmar reposición"}
+              </Button>
+            </div>
+          </form>
+        )}
       </Modal>
 
       <ConfirmModal
