@@ -218,6 +218,22 @@ export function Historial() {
 
   const getPagado = (s) => Number(s.amountPaid) || 0;
   const getPendiente = (s) => Math.max(0, (s.total || 0) - getPagado(s));
+  const formatSaleTotalWithEquivalent = (sale) => {
+    const amount = Number(sale?.total) || 0;
+    const currency = getSaleCurrency(sale);
+    const main = formatCurrency(amount, currency);
+    if (currency !== "USD") return main;
+    const equivalentNio = convertAmountBetweenCurrencies(amount, "USD", "NIO", sale, settings?.exchangeRate);
+    return `${main} (${formatCurrency(equivalentNio, "NIO")})`;
+  };
+  const formatPaymentAmountWithEquivalent = (amount, sale) => {
+    const value = Number(amount) || 0;
+    const currency = getSaleCurrency(sale);
+    const main = formatCurrency(value, currency);
+    if (currency !== "USD") return main;
+    const equivalentNio = convertAmountBetweenCurrencies(value, "USD", "NIO", sale, settings?.exchangeRate);
+    return `${main} (${formatCurrency(equivalentNio, "NIO")})`;
+  };
   const getParsedPaymentAmount = () => {
     const n = parseFloat(String(paymentAmount).replace(",", ".").trim());
     return Number.isFinite(n) ? n : 0;
@@ -388,7 +404,9 @@ export function Historial() {
                       <TableCell className="text-slate-600 dark:text-slate-300 max-w-[180px] truncate" title={itemsSummary(s)}>
                         {itemsSummary(s)}
                       </TableCell>
-                      <TableCell className="text-right font-semibold tabular-nums">{formatCurrency(s.total)}</TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">
+                        {formatSaleTotalWithEquivalent(s)}
+                      </TableCell>
                       <TableCell>
                         <Badge variant={getStatusBadgeVariant(s)}>
                           {getStatusLabel(s)}
@@ -472,7 +490,7 @@ export function Historial() {
         onClose={() => setCancelTarget(null)}
         onConfirm={handleCancelConfirm}
         title="Cancelar venta"
-        message={cancelTarget ? `¿Cancelar la venta ${cancelTarget.id} de ${cancelTarget.clientName} (${formatCurrency(cancelTarget.total)})?${isRealSale(cancelTarget) ? " Se restaurará el stock." : ""} El registro permanecerá como "Cancelada".` : ""}
+        message={cancelTarget ? `¿Cancelar la venta ${cancelTarget.id} de ${cancelTarget.clientName} (${formatCurrency(cancelTarget.total, getSaleCurrency(cancelTarget))})?${isRealSale(cancelTarget) ? " Se restaurará el stock." : ""} El registro permanecerá como "Cancelada".` : ""}
         confirmLabel="Sí, cancelar venta"
         loading={cancelLoading}
       />
@@ -614,16 +632,16 @@ export function Historial() {
               </div>
               <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5">
                 <p className="text-xs text-slate-500 dark:text-slate-400">Monto Total</p>
-                <p className="mt-1 font-semibold tabular-nums">{formatCurrency(detailSale.total || 0, detailSale.currency || "NIO")}</p>
+                <p className="mt-1 font-semibold tabular-nums">{formatCurrency(detailSale.total || 0, getSaleCurrency(detailSale))}</p>
               </div>
               <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5">
                 <p className="text-xs text-slate-500 dark:text-slate-400">Total Pagado</p>
-                <p className="mt-1 font-semibold tabular-nums">{formatCurrency(getPagado(detailSale), detailSale.currency || "NIO")}</p>
+                <p className="mt-1 font-semibold tabular-nums">{formatCurrency(getPagado(detailSale), getSaleCurrency(detailSale))}</p>
               </div>
               <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-900/20 px-3 py-2.5">
                 <p className="text-xs text-amber-700 dark:text-amber-300">Saldo Pendiente</p>
                 <p className="mt-1 font-semibold tabular-nums text-amber-700 dark:text-amber-300">
-                  {formatCurrency(getPendiente(detailSale), detailSale.currency || "NIO")}
+                  {formatCurrency(getPendiente(detailSale), getSaleCurrency(detailSale))}
                 </p>
               </div>
             </div>
@@ -687,8 +705,8 @@ export function Historial() {
                             <tr key={i} className="border-t border-slate-100 dark:border-slate-800">
                               <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{it.productName || it.serviceName || "—"}</td>
                               <td className="px-3 py-2 text-right tabular-nums">{qty}</td>
-                              <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(unit, detailSale.currency || "NIO")}</td>
-                              <td className="px-3 py-2 text-right tabular-nums font-medium">{formatCurrency(subtotal, detailSale.currency || "NIO")}</td>
+                              <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(unit, getSaleCurrency(detailSale))}</td>
+                              <td className="px-3 py-2 text-right tabular-nums font-medium">{formatCurrency(subtotal, getSaleCurrency(detailSale))}</td>
                             </tr>
                           );
                         })}
@@ -716,7 +734,7 @@ export function Historial() {
                                   {p?.date || p?.createdAt ? new Date(p.date || p.createdAt).toLocaleString("es-NI") : "—"}
                                 </td>
                                 <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                  {formatCurrency(Number(p?.amount ?? p?.monto ?? 0), detailSale.currency || "NIO")}
+                                  {formatPaymentAmountWithEquivalent(Number(p?.amount ?? p?.monto ?? 0), detailSale)}
                                 </td>
                                 <td className="px-3 py-2">{getPaymentTypeLabel(p)}</td>
                               </tr>
