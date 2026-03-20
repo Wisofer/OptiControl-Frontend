@@ -1,6 +1,5 @@
-import { getApiUrl, isStaticDemo } from "./config.js";
+import { getApiUrl } from "./config.js";
 import { getToken, clearToken } from "./token.js";
-import { getStaticResponse } from "./staticData.js";
 
 let onUnauthorized = () => {};
 
@@ -12,16 +11,7 @@ function isLoginRequest(path) {
   return path.includes("/api/auth/login");
 }
 
-/** En modo demo estático no se llama al backend; se devuelven datos locales (presentación al cliente). */
 async function request(path, options = {}) {
-  const method = (options.method || "GET").toUpperCase();
-
-  if (isStaticDemo) {
-    await new Promise((r) => setTimeout(r, 200));
-    const pathname = path.startsWith("/") ? path : `/${path}`;
-    return getStaticResponse(pathname, method, options.body);
-  }
-
   const url = `${getApiUrl()}${path.startsWith("/") ? path : `/${path}`}`;
   const headers = {
     "Content-Type": "application/json",

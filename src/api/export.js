@@ -1,4 +1,4 @@
-import { getApiUrl, isStaticDemo } from "./config.js";
+import { getApiUrl } from "./config.js";
 import { getToken } from "./token.js";
 
 function buildQueryString(params) {
@@ -21,9 +21,6 @@ function buildQueryString(params) {
  * @returns {Promise<void>}
  */
 export async function downloadExport(basePath, format, params, defaultFilename) {
-  if (isStaticDemo) {
-    throw new Error("En modo demo la exportación está deshabilitada.");
-  }
   const token = getToken();
   const base = basePath.startsWith("/") ? basePath : `/${basePath}`;
   const path = `${base}/export/${format}${buildQueryString(params)}`;

@@ -1,5 +1,5 @@
 import { api } from "./client.js";
-import { getApiUrl, isStaticDemo } from "./config.js";
+import { getApiUrl } from "./config.js";
 import { getToken } from "./token.js";
 
 const base = "/api/invoices";
@@ -11,11 +11,8 @@ function qs(params) {
   return str ? `?${str}` : "";
 }
 
-/** GET /api/invoices/{id}/pdf — PDF con Bearer, devuelve Blob para imprimir/descargar. En modo demo estático no hay backend. */
+/** GET /api/invoices/{id}/pdf — PDF con Bearer, devuelve Blob para imprimir/descargar. */
 async function getPdfBlob(id) {
-  if (isStaticDemo) {
-    throw new Error("En modo demo no hay generación de PDF.");
-  }
   const token = getToken();
   const url = `${getApiUrl()}${base.startsWith("/") ? base : `/${base}`}/${id}/pdf`;
   const res = await fetch(url, {

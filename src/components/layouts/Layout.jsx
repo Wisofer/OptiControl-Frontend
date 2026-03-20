@@ -16,8 +16,7 @@ import { cn } from "../../utils/cn";
 /**
  * Layout principal: sidebar (colapsable en desktop, menú móvil con overlay en pantallas pequeñas)
  * y área de contenido con Navbar. Responsive: en móvil el menú se abre con el botón hamburguesa
- * y se cierra al navegar o al tocar el overlay. En modo estático (VITE_STATIC_DEMO) las alertas
- * no llaman al backend.
+ * y se cierra al navegar o al tocar el overlay.
  */
 export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);

@@ -20,6 +20,7 @@ import { useSnackbar } from "../contexts/SnackbarContext";
 import { formatCurrency, formatDate, formatAmountByPaymentMethod } from "../utils/format";
 import { buildInvoiceWhatsAppMessage } from "../utils/whatsappMessage";
 import { invoicesApi } from "../api/invoices";
+import { openPdfBlob, getPdfOpenErrorMessage } from "../utils/pdf";
 import { whatsappTemplatesApi } from "../api/whatsappTemplates";
 import { useExport } from "../hooks/useExport";
 import { cn } from "../utils/cn";
@@ -67,30 +68,16 @@ async function sendInvoiceWhatsApp(inv, clients, clientNameFn, snackbar) {
 async function printInvoice(inv, snackbar) {
   try {
     const blob = await invoicesApi.getPdf(inv.id);
-    const blobUrl = URL.createObjectURL(blob);
-    const w = window.open(blobUrl, "_blank");
-    if (!w) {
-      // Fallback: si el popup está bloqueado, forzamos descarga usando el Blob.
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = `Factura_${inv.id || "INV"}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-      snackbar.success("Descarga iniciada. Si quieres imprimir, abre el PDF y usa Ctrl+P.");
+    const result = openPdfBlob(blob, { filename: `Factura_${inv.id || "INV"}.pdf` });
+    if (!result.ok) {
+      snackbar.error(getPdfOpenErrorMessage(result, "Error al imprimir la factura."));
       return;
     }
-    const tryPrint = () => {
-      try {
-        w.print();
-        w.onafterprint = () => w.close();
-      } catch (_) {}
-    };
-    w.onload = tryPrint;
-    setTimeout(tryPrint, 800);
-    snackbar.success("Se abrió la factura. Si no se abre el diálogo de impresión, usa Ctrl+P.");
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    if (result.fallback === "download") {
+      snackbar.success("Descarga iniciada. Abre el PDF e imprime con Ctrl+P (ventana emergente bloqueada).");
+    } else {
+      snackbar.success("Si no aparece el diálogo de impresión, usa Ctrl+P en la ventana del PDF.");
+    }
   } catch (err) {
     snackbar.error(err?.message || "Error al abrir la factura para imprimir");
   }

@@ -1,5 +1,4 @@
 import { api } from "./client.js";
-import { isStaticDemo } from "./config.js";
 
 const base = "/api/products";
 
@@ -34,8 +33,8 @@ function toProductBodyCamel(body, includeId = false) {
 export const productsApi = {
   list: (params) => api.get(`${base}${qs(params || {})}`),
   get: (id) => api.get(`${base}/${id}`),
-  create: (body) => api.post(base, isStaticDemo ? body : toProductBodyCamel(body)),
-  update: (id, body) => api.put(`${base}/${id}`, isStaticDemo ? { ...body, id } : { ...toProductBodyCamel(body, true), id }),
+  create: (body) => api.post(base, toProductBodyCamel(body)),
+  update: (id, body) => api.put(`${base}/${id}`, { ...toProductBodyCamel(body, true), id }),
   delete: (id) => api.delete(`${base}/${id}`),
   /** Productos con stock por debajo del mínimo (para alertas/widget). */
   lowStock: () => api.get(`${base}/low-stock`),

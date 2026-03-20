@@ -186,7 +186,6 @@ export function Ventas() {
         amountPaidCordobas: 0,
         moneda,
         tipoPago: normalizedPaymentMethod,
-        exchangeRate,
       });
       setSelectedClientId("");
       setCart([]);
@@ -250,7 +249,6 @@ export function Ventas() {
         amountPaidCordobas: moneda === "USD" ? amountPaidEnMonedaPago * exchangeRate : amountPaidEnMonedaPago,
         moneda,
         tipoPago: normalizedPaymentMethod,
-        exchangeRate,
       });
       setSelectedClientId("");
       setCart([]);
@@ -263,20 +261,34 @@ export function Ventas() {
 
   const handlePrintTicket = async () => {
     if (!saleForPrintCard) return;
-    const result = await openProtectedPdf(saleForPrintCard.saleTicketPdfUrl);
+    const result = await openProtectedPdf(saleForPrintCard.saleTicketPdfUrl, {
+      filename: "ticket.pdf",
+    });
     if (!result.ok) {
       snackbar.error(getPdfOpenErrorMessage(result, "No hay ticket PDF disponible para esta venta."));
       return;
+    }
+    if (result.fallback === "download") {
+      snackbar.success("Se descargó el PDF. Ábrelo e imprime con Ctrl+P (el navegador bloqueó la ventana emergente).");
+    } else {
+      snackbar.success("Si no aparece el diálogo de impresión, usa Ctrl+P en la ventana del PDF.");
     }
     setSaleForPrintCard(null);
   };
 
   const openBackendInvoicePdf = async () => {
     if (!saleForPrintCard?.invoicePdfUrl) return false;
-    const result = await openProtectedPdf(saleForPrintCard.invoicePdfUrl);
+    const result = await openProtectedPdf(saleForPrintCard.invoicePdfUrl, {
+      filename: `factura_${saleForPrintCard.invoiceId || "doc"}.pdf`,
+    });
     if (!result.ok) {
       snackbar.error(getPdfOpenErrorMessage(result, "No se pudo abrir la factura PDF."));
       return false;
+    }
+    if (result.fallback === "download") {
+      snackbar.success("Se descargó la factura. Ábrela e imprime con Ctrl+P (ventana emergente bloqueada).");
+    } else {
+      snackbar.success("Si no aparece el diálogo de impresión, usa Ctrl+P en la ventana del PDF.");
     }
     setSaleForPrintCard(null);
     return true;

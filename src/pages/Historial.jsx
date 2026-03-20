@@ -45,12 +45,23 @@ export function Historial() {
 
   const handlePrintTicket = async (sale) => {
     if (!sale) return;
-    const direct = await openProtectedPdf(sale.saleTicketPdfUrl);
-    if (direct.ok) return;
+    const ticketName = `ticket_${sale.id}.pdf`;
+    const direct = await openProtectedPdf(sale.saleTicketPdfUrl, { filename: ticketName });
+    if (direct.ok) {
+      if (direct.fallback === "download") {
+        snackbar.success("Se descargó el PDF. Ábrelo e imprime con Ctrl+P (ventana emergente bloqueada).");
+      }
+      return;
+    }
     try {
       const res = await getTicketPdfUrl(sale.id);
-      const byEndpoint = await openProtectedPdf(res?.pdfUrl);
-      if (byEndpoint.ok) return;
+      const byEndpoint = await openProtectedPdf(res?.pdfUrl, { filename: ticketName });
+      if (byEndpoint.ok) {
+        if (byEndpoint.fallback === "download") {
+          snackbar.success("Se descargó el PDF. Ábrelo e imprime con Ctrl+P (ventana emergente bloqueada).");
+        }
+        return;
+      }
       snackbar.error(getPdfOpenErrorMessage(byEndpoint, "No hay ticket PDF disponible para esta venta/cotización."));
       return;
     } catch (_) {
@@ -65,13 +76,27 @@ export function Historial() {
       handlePrintTicket(sale);
       return;
     }
-    const fromSale = await openProtectedPdf(sale.invoicePdfUrl);
-    if (fromSale.ok) return;
+    const invName = `factura_${sale.invoiceId || sale.id}.pdf`;
+    const fromSale = await openProtectedPdf(sale.invoicePdfUrl, { filename: invName });
+    if (fromSale.ok) {
+      if (fromSale.fallback === "download") {
+        snackbar.success("Se descargó la factura. Ábrela e imprime con Ctrl+P (ventana emergente bloqueada).");
+      }
+      return;
+    }
     try {
       const inv = await createOrReuseInvoice(sale.id);
-      const fromEndpoint = await openProtectedPdf(inv?.pdfUrl);
+      const fromEndpoint = await openProtectedPdf(inv?.pdfUrl, { filename: invName });
       if (fromEndpoint.ok) {
-        if (inv?.reused) snackbar.success("Se reutilizó la factura existente.");
+        if (fromEndpoint.fallback === "download") {
+          snackbar.success(
+            inv?.reused
+              ? "Factura reutilizada. Se descargó el PDF; ábrelo e imprime con Ctrl+P (ventana emergente bloqueada)."
+              : "Se descargó la factura. Ábrela e imprime con Ctrl+P (ventana emergente bloqueada)."
+          );
+        } else if (inv?.reused) {
+          snackbar.success("Se reutilizó la factura existente.");
+        }
         return;
       }
       snackbar.error(getPdfOpenErrorMessage(fromEndpoint, "No fue posible obtener la factura PDF desde backend."));

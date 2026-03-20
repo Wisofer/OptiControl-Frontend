@@ -20,7 +20,7 @@ import { useProducts } from "../hooks/useProducts";
 import { useToggle } from "../hooks/useToggle";
 import { useSnackbar } from "../contexts/SnackbarContext";
 import { formatCurrency } from "../utils/format";
-import { TIPOS_PRODUCTO } from "../data/products.js";
+import { TIPOS_PRODUCTO } from "../constants/productTypes.js";
 
 const EMPTY_FORM = {
   nombre_producto: "",
