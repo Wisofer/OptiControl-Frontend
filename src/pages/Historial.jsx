@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { History, Eye, Printer, Ban, PlusCircle, MessageCircle } from "lucide-react";
+import { History, Eye, Printer, Ban, PlusCircle, MessageCircle, Search } from "lucide-react";
 import {
   Card,
   Table,
@@ -25,14 +25,17 @@ import { STATUS_VARIANT } from "../constants/statusVariants";
 import { cn } from "../utils/cn";
 
 export function Historial() {
-  const { sales, loading, error, totalCount, totalPages, page, pageSize, setPage, cancel, addPayment, createOrReuseInvoice, getTicketPdfUrl } = useSalesHistory();
+  const [search, setSearch] = useState("");
+  const { sales, loading, error, totalCount, totalPages, page, pageSize, setPage, cancel, addPayment, createOrReuseInvoice, getTicketPdfUrl } = useSalesHistory(search);
   const { settings } = useSettings();
   const snackbar = useSnackbar();
   const [detailSale, setDetailSale] = useState(null);
+  const [detailTab, setDetailTab] = useState("items");
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [paymentTarget, setPaymentTarget] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentCurrency, setPaymentCurrency] = useState("NIO");
   const [paymentLoading, setPaymentLoading] = useState(false);
 
   const itemsSummary = (s) => {
@@ -162,23 +165,112 @@ export function Historial() {
     setCancelLoading(false);
   };
 
-  const getStatus = (s) => s.status || "Pagada";
-  const isPagada = (s) => getStatus(s) === "Pagada";
-  const isPendiente = (s) => getStatus(s) === "pendiente";
-  const isCotizacion = (s) => getStatus(s) === "cotizacion";
-  const isCancelada = (s) => getStatus(s) === "Cancelada";
+  const getStatusRaw = (s) => String(s?.status ?? "").trim();
+  const getStatusCanonical = (s) => {
+    const normalized = getStatusRaw(s)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+    if (!normalized) return "pagada";
+    if (["pagada", "pagado", "completada", "completado"].includes(normalized)) return "pagada";
+    if (["pendiente", "parcial"].includes(normalized)) return "pendiente";
+    if (["cotizacion", "quote"].includes(normalized)) return "cotizacion";
+    if (["cancelada", "cancelado", "anulada", "anulado"].includes(normalized)) return "cancelada";
+    return normalized;
+  };
+  const isPagada = (s) => getStatusCanonical(s) === "pagada";
+  const isPendiente = (s) => getStatusCanonical(s) === "pendiente";
+  const isCotizacion = (s) => getStatusCanonical(s) === "cotizacion";
+  const isCancelada = (s) => getStatusCanonical(s) === "cancelada";
   const isRealSale = (s) => isPagada(s) || isPendiente(s);
 
+  const getStatusBadgeVariant = (s) => {
+    const canonical = getStatusCanonical(s);
+    if (canonical === "pagada") return STATUS_VARIANT.Pagada;
+    if (canonical === "pendiente") return STATUS_VARIANT.pendiente;
+    if (canonical === "cotizacion") return STATUS_VARIANT.cotizacion;
+    if (canonical === "cancelada") return STATUS_VARIANT.Cancelada;
+    return STATUS_VARIANT[getStatusRaw(s)] || "default";
+  };
+
   const getStatusLabel = (s) => {
-    const st = getStatus(s);
-    if (st === "cotizacion") return "Cotización";
-    if (st === "pendiente") return "Pendiente";
-    if (st === "Pagada") return "Pagada";
-    return "Cancelada";
+    const canonical = getStatusCanonical(s);
+    if (canonical === "cotizacion") return "Cotización";
+    if (canonical === "pendiente") return "Pendiente";
+    if (canonical === "pagada") return "Pagada";
+    if (canonical === "cancelada") return "Cancelada";
+    const raw = getStatusRaw(s);
+    return raw || "Pagada";
   };
 
   const getPagado = (s) => Number(s.amountPaid) || 0;
   const getPendiente = (s) => Math.max(0, (s.total || 0) - getPagado(s));
+  const getSaleCurrency = (s) => (String(s?.currency || "NIO").toUpperCase() === "USD" ? "USD" : "NIO");
+  const getEffectiveExchangeRate = (s) => {
+    const n = Number(s?.exchangeRate ?? settings?.exchangeRate);
+    return Number.isFinite(n) && n > 0 ? n : 36.8;
+  };
+  const convertAmountBetweenCurrencies = (amount, fromCurrency, toCurrency, sale) => {
+    if (fromCurrency === toCurrency) return amount;
+    const rate = getEffectiveExchangeRate(sale);
+    if (fromCurrency === "USD" && toCurrency === "NIO") return amount * rate;
+    if (fromCurrency === "NIO" && toCurrency === "USD") return amount / rate;
+    return amount;
+  };
+  const getPaymentTypeLabel = (p) => {
+    const raw = String(
+      p?.type ?? p?.paymentType ?? p?.payment_method ?? p?.paymentMethod ?? p?.method ?? ""
+    )
+      .trim()
+      .toLowerCase();
+    if (!raw) return "—";
+    if (["fisico", "físico", "efectivo", "cash"].includes(raw)) return "💵 Físico";
+    if (["tarjeta", "card"].includes(raw)) return "💳 Tarjeta";
+    if (["transferencia", "transfer", "bank_transfer"].includes(raw)) return "🏦 Transferencia";
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+  };
+  const getPaymentsHistory = (s) => {
+    const list = s?.paymentHistory || s?.payments || [];
+    return Array.isArray(list) ? list : [];
+  };
+  const getParsedPaymentAmount = () => {
+    const n = parseFloat(String(paymentAmount).replace(",", ".").trim());
+    return Number.isFinite(n) ? n : 0;
+  };
+  const getPaymentMaxInSelectedCurrency = () => {
+    if (!paymentTarget) return 0;
+    return convertAmountBetweenCurrencies(
+      getPendiente(paymentTarget),
+      getSaleCurrency(paymentTarget),
+      paymentCurrency,
+      paymentTarget
+    );
+  };
+  const getPaymentChangeInSelectedCurrency = () => {
+    if (!paymentTarget) return 0;
+    const amount = getParsedPaymentAmount();
+    if (!(amount > 0)) return 0;
+    return Math.max(0, amount - getPaymentMaxInSelectedCurrency());
+  };
+  const getPaymentChangeDisplay = () => {
+    const changeInSelected = getPaymentChangeInSelectedCurrency();
+    if (!(changeInSelected > 0)) return null;
+    if (paymentCurrency === "USD") {
+      const rate = getEffectiveExchangeRate(paymentTarget);
+      return {
+        mainAmount: changeInSelected * rate,
+        mainCurrency: "NIO",
+        secondaryAmount: changeInSelected,
+        secondaryCurrency: "USD",
+      };
+    }
+    return {
+      mainAmount: changeInSelected,
+      mainCurrency: paymentCurrency,
+      secondaryAmount: null,
+      secondaryCurrency: null,
+    };
+  };
 
   const handleAddPaymentSubmit = async () => {
     if (!paymentTarget) return;
@@ -189,10 +281,25 @@ export function Historial() {
     }
     setPaymentLoading(true);
     try {
-      await addPayment(paymentTarget.id, amount);
+      const saleCurrency = getSaleCurrency(paymentTarget);
+      const pendienteEnMonedaVenta = getPendiente(paymentTarget);
+      const amountInSaleCurrency = convertAmountBetweenCurrencies(amount, paymentCurrency, saleCurrency, paymentTarget);
+      const amountToApply = Math.min(amountInSaleCurrency, pendienteEnMonedaVenta);
+      await addPayment(paymentTarget.id, amountToApply, {
+        paymentType: paymentCurrency === "USD" ? "Dolares" : "Cordobas",
+      });
+      const vuelto = getPaymentChangeDisplay();
       setPaymentTarget(null);
       setPaymentAmount("");
-      snackbar.success("Abono registrado");
+      setPaymentCurrency("NIO");
+      snackbar.success(
+        vuelto && vuelto.mainAmount > 0
+          ? `Pago aplicado por ${formatCurrency(
+              convertAmountBetweenCurrencies(amountToApply, saleCurrency, paymentCurrency, paymentTarget),
+              paymentCurrency
+            )}. Vuelto a devolver: ${formatCurrency(vuelto.mainAmount, vuelto.mainCurrency)}.`
+          : "Abono registrado"
+      );
     } catch (err) {
       snackbar.error(err?.message || "Error al registrar el abono");
     }
@@ -218,6 +325,19 @@ export function Historial() {
       )}
 
       <Card>
+        <div className="mb-4">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+            <input
+              type="search"
+              placeholder="Buscar por cliente o producto/servicio..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 py-2 pl-9 pr-3 text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              aria-label="Buscar en historial"
+            />
+          </div>
+        </div>
         {loading && !sales.length ? (
           <TableSkeleton columns={8} rows={8} />
         ) : sales.length === 0 ? (
@@ -233,10 +353,8 @@ export function Historial() {
                   <TableRow>
                     <TableHeaderCell>Fecha</TableHeaderCell>
                     <TableHeaderCell>Cliente</TableHeaderCell>
-                    <TableHeaderCell>Ítems</TableHeaderCell>
+                    <TableHeaderCell>Productos/Servicios</TableHeaderCell>
                     <TableHeaderCell className="text-right">Total</TableHeaderCell>
-                    <TableHeaderCell className="text-right">Pagado</TableHeaderCell>
-                    <TableHeaderCell className="text-right">Pendiente</TableHeaderCell>
                     <TableHeaderCell>Estado</TableHeaderCell>
                     <TableHeaderCell className="w-40">Acciones</TableHeaderCell>
                   </TableRow>
@@ -252,10 +370,8 @@ export function Historial() {
                         {itemsSummary(s)}
                       </TableCell>
                       <TableCell className="text-right font-semibold tabular-nums">{formatCurrency(s.total)}</TableCell>
-                      <TableCell className="text-right tabular-nums text-slate-600 dark:text-slate-400">{formatCurrency(getPagado(s))}</TableCell>
-                      <TableCell className="text-right tabular-nums text-amber-600 dark:text-amber-400">{formatCurrency(getPendiente(s))}</TableCell>
                       <TableCell>
-                        <Badge variant={STATUS_VARIANT[getStatus(s)] || "default"}>
+                        <Badge variant={getStatusBadgeVariant(s)}>
                           {getStatusLabel(s)}
                         </Badge>
                       </TableCell>
@@ -263,7 +379,10 @@ export function Historial() {
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
-                            onClick={() => setDetailSale(s)}
+                            onClick={() => {
+                              setDetailSale(s);
+                              setDetailTab("items");
+                            }}
                             className="rounded-lg p-2 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors"
                             title="Ver detalle"
                           >
@@ -294,16 +413,6 @@ export function Historial() {
                                 <MessageCircle className="h-4 w-4" />
                               </button>
                             </>
-                          )}
-                          {isPendiente(s) && (
-                            <button
-                              type="button"
-                              onClick={() => { setPaymentTarget(s); setPaymentAmount(""); }}
-                              className="rounded-lg p-2 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
-                              title="Agregar pago"
-                            >
-                              <PlusCircle className="h-4 w-4" />
-                            </button>
                           )}
                           {!isCancelada(s) && (
                             <button
@@ -347,25 +456,124 @@ export function Historial() {
         loading={cancelLoading}
       />
 
-      <Modal open={!!paymentTarget} onClose={() => { setPaymentTarget(null); setPaymentAmount(""); }} title="Agregar pago" size="sm">
+      <Modal
+        open={!!paymentTarget}
+        onClose={() => {
+          setPaymentTarget(null);
+          setPaymentAmount("");
+          setPaymentCurrency("NIO");
+        }}
+        title="Agregar pago"
+        size="sm"
+      >
         {paymentTarget && (
           <div className="space-y-4">
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              Venta {paymentTarget.id} · {paymentTarget.clientName}. Pendiente: {formatCurrency(getPendiente(paymentTarget))}.
-            </p>
+            <div className="rounded-xl bg-sky-600/90 text-white px-4 py-3">
+              <p className="text-sm font-semibold">
+                Factura: {paymentTarget.invoiceId || paymentTarget.id || "—"}
+              </p>
+              <p className="text-sm mt-0.5">
+                Saldo pendiente:{" "}
+                <span className="font-semibold">
+                  {formatCurrency(
+                    convertAmountBetweenCurrencies(
+                      getPendiente(paymentTarget),
+                      getSaleCurrency(paymentTarget),
+                      paymentCurrency,
+                      paymentTarget
+                    ),
+                    paymentCurrency
+                  )}
+                </span>
+              </p>
+              <p className="text-xs text-sky-100 mt-1.5">
+                Puede registrar un abono parcial ingresando un monto menor al saldo pendiente.
+              </p>
+            </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Monto a abonar (C$)</label>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">
+                Moneda
+              </label>
+              <input
+                type="hidden"
+                value={paymentCurrency}
+                readOnly
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={paymentCurrency === "NIO" ? "default" : "secondary"}
+                  onClick={() => setPaymentCurrency("NIO")}
+                  className={cn(
+                    "w-full border-2",
+                    paymentCurrency === "NIO"
+                      ? "border-primary-600 ring-2 ring-primary-300/60 dark:ring-primary-700/50"
+                      : "border-slate-300 dark:border-slate-600"
+                  )}
+                >
+                  C$ Córdobas
+                </Button>
+                <Button
+                  type="button"
+                  variant={paymentCurrency === "USD" ? "default" : "secondary"}
+                  onClick={() => setPaymentCurrency("USD")}
+                  className={cn(
+                    "w-full border-2",
+                    paymentCurrency === "USD"
+                      ? "border-primary-600 ring-2 ring-primary-300/60 dark:ring-primary-700/50"
+                      : "border-slate-300 dark:border-slate-600"
+                  )}
+                >
+                  $ Dólares
+                </Button>
+              </div>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                TC: C$ {getEffectiveExchangeRate(paymentTarget).toFixed(2)} = $1
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">
+                Monto recibido
+              </label>
               <input
                 type="text"
                 inputMode="decimal"
                 value={paymentAmount}
                 onChange={(e) => setPaymentAmount(e.target.value)}
-                placeholder="Ej: 500"
-                className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2.5 text-slate-800 dark:text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                placeholder={paymentCurrency === "USD" ? "0.00" : "0.00"}
+                className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-xl font-semibold tabular-nums text-slate-800 dark:text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
               />
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Pendiente actual:{" "}
+                {formatCurrency(
+                  getPaymentMaxInSelectedCurrency(),
+                  paymentCurrency
+                )}
+              </p>
+              {getPaymentChangeDisplay() && (
+                <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
+                  Vuelto a devolver
+                  {paymentCurrency === "USD" ? " (en córdobas)" : ""}:{" "}
+                  {formatCurrency(getPaymentChangeDisplay().mainAmount, getPaymentChangeDisplay().mainCurrency)}
+                </p>
+              )}
+              {getPaymentChangeDisplay()?.secondaryAmount != null && (
+                <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
+                  equivale a {formatCurrency(getPaymentChangeDisplay().secondaryAmount, getPaymentChangeDisplay().secondaryCurrency)}
+                </p>
+              )}
             </div>
             <div className="flex gap-2 justify-end">
-              <Button variant="secondary" onClick={() => { setPaymentTarget(null); setPaymentAmount(""); }}>Cancelar</Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setPaymentTarget(null);
+                  setPaymentAmount("");
+                  setPaymentCurrency("NIO");
+                }}
+              >
+                Cancelar
+              </Button>
               <Button onClick={handleAddPaymentSubmit} disabled={paymentLoading || !paymentAmount.trim()}>
                 {paymentLoading ? "Guardando…" : "Registrar abono"}
               </Button>
@@ -374,49 +582,160 @@ export function Historial() {
         )}
       </Modal>
 
-      <Modal open={!!detailSale} onClose={() => setDetailSale(null)} title="Detalle de venta" size="md">
+      <Modal open={!!detailSale} onClose={() => setDetailSale(null)} title="Detalles de Factura" size="3xl">
         {detailSale && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <span className="text-slate-500">Cliente:</span>
-              <span className="font-medium">{detailSale.clientName}</span>
-              <span className="text-slate-500">Fecha:</span>
-              <span>{detailSale.date ? new Date(detailSale.date).toLocaleString("es-NI") : "—"}</span>
-              <span className="text-slate-500">Estado:</span>
-              <span>
-                <span className={cn(
-                  "rounded-full px-2 py-0.5 text-xs font-medium",
-                  isPagada(detailSale) && "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
-                  isPendiente(detailSale) && "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
-                  isCotizacion(detailSale) && "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
-                  isCancelada(detailSale) && "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
-                )}>
-                  {getStatusLabel(detailSale)}
-                </span>
-              </span>
-              {(isPagada(detailSale) || isPendiente(detailSale)) && (
-                <>
-                  <span className="text-slate-500">Pagado:</span>
-                  <span className="tabular-nums">{formatCurrency(getPagado(detailSale))}</span>
-                  <span className="text-slate-500">Pendiente:</span>
-                  <span className="tabular-nums">{formatCurrency(getPendiente(detailSale))}</span>
-                </>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Información completa de la factura</p>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5">
+                <p className="text-xs text-slate-500 dark:text-slate-400">Estado</p>
+                <div className="mt-1">
+                  <Badge variant={getStatusBadgeVariant(detailSale)}>{getStatusLabel(detailSale)}</Badge>
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5">
+                <p className="text-xs text-slate-500 dark:text-slate-400">Monto Total</p>
+                <p className="mt-1 font-semibold tabular-nums">{formatCurrency(detailSale.total || 0, detailSale.currency || "NIO")}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5">
+                <p className="text-xs text-slate-500 dark:text-slate-400">Total Pagado</p>
+                <p className="mt-1 font-semibold tabular-nums">{formatCurrency(getPagado(detailSale), detailSale.currency || "NIO")}</p>
+              </div>
+              <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-900/20 px-3 py-2.5">
+                <p className="text-xs text-amber-700 dark:text-amber-300">Saldo Pendiente</p>
+                <p className="mt-1 font-semibold tabular-nums text-amber-700 dark:text-amber-300">
+                  {formatCurrency(getPendiente(detailSale), detailSale.currency || "NIO")}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                <p><span className="text-slate-500 dark:text-slate-400">Cliente:</span> <span className="font-medium">{detailSale.clientName || "Cliente General"}</span></p>
+                <p><span className="text-slate-500 dark:text-slate-400">Tipo:</span> <span className="font-medium">{isCotizacion(detailSale) ? "Cotización" : "Venta"}</span></p>
+                <p><span className="text-slate-500 dark:text-slate-400">Fecha:</span> <span className="font-medium">{detailSale.date ? new Date(detailSale.date).toLocaleString("es-NI") : "—"}</span></p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700">
+              <div className="border-b border-slate-200 dark:border-slate-700 p-2">
+                <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setDetailTab("items")}
+                    className={cn(
+                      "px-3 py-1.5 text-sm font-medium",
+                      detailTab === "items"
+                        ? "bg-primary-600 text-white"
+                        : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300"
+                    )}
+                  >
+                    Productos/Servicios
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDetailTab("payments")}
+                    className={cn(
+                      "px-3 py-1.5 text-sm font-medium border-l border-slate-200 dark:border-slate-700",
+                      detailTab === "payments"
+                        ? "bg-primary-600 text-white"
+                        : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300"
+                    )}
+                  >
+                    Historial de Pagos
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-3">
+                {detailTab === "items" ? (
+                  <div className="overflow-x-auto rounded-lg border border-slate-100 dark:border-slate-800">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 dark:bg-slate-800/60">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium text-slate-600 dark:text-slate-300">Descripción</th>
+                          <th className="text-right px-3 py-2 font-medium text-slate-600 dark:text-slate-300">Cantidad</th>
+                          <th className="text-right px-3 py-2 font-medium text-slate-600 dark:text-slate-300">Precio Unit.</th>
+                          <th className="text-right px-3 py-2 font-medium text-slate-600 dark:text-slate-300">Subtotal</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(detailSale.items || []).map((it, i) => {
+                          const qty = Number(it.quantity) || 0;
+                          const subtotal = Number(it.subtotal) || 0;
+                          const unit = qty > 0 ? subtotal / qty : Number(it.unitPrice || 0);
+                          return (
+                            <tr key={i} className="border-t border-slate-100 dark:border-slate-800">
+                              <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{it.productName || it.serviceName || "—"}</td>
+                              <td className="px-3 py-2 text-right tabular-nums">{qty}</td>
+                              <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(unit, detailSale.currency || "NIO")}</td>
+                              <td className="px-3 py-2 text-right tabular-nums font-medium">{formatCurrency(subtotal, detailSale.currency || "NIO")}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <>
+                    {getPaymentsHistory(detailSale).length === 0 ? (
+                      <p className="text-sm text-slate-500 dark:text-slate-400">No hay pagos registrados en el historial.</p>
+                    ) : (
+                      <div className="overflow-x-auto rounded-lg border border-slate-100 dark:border-slate-800">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50 dark:bg-slate-800/60">
+                            <tr>
+                              <th className="text-left px-3 py-2 font-medium text-slate-600 dark:text-slate-300">Fecha</th>
+                              <th className="text-right px-3 py-2 font-medium text-slate-600 dark:text-slate-300">Monto</th>
+                              <th className="text-left px-3 py-2 font-medium text-slate-600 dark:text-slate-300">Tipo</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {getPaymentsHistory(detailSale).map((p, idx) => (
+                              <tr key={idx} className="border-t border-slate-100 dark:border-slate-800">
+                                <td className="px-3 py-2 text-slate-700 dark:text-slate-200">
+                                  {p?.date || p?.createdAt ? new Date(p.date || p.createdAt).toLocaleString("es-NI") : "—"}
+                                </td>
+                                <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                  {formatCurrency(Number(p?.amount ?? p?.monto ?? 0), detailSale.currency || "NIO")}
+                                </td>
+                                <td className="px-3 py-2">{getPaymentTypeLabel(p)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-t border-slate-200 dark:border-slate-700 pt-3 -mx-6 px-6 flex flex-col sm:flex-row justify-end gap-2">
+              {isPendiente(detailSale) && (
+                <Button
+                  onClick={() => {
+                    setDetailSale(null);
+                    setPaymentTarget(detailSale);
+                    setPaymentAmount("");
+                    setPaymentCurrency(getSaleCurrency(detailSale));
+                  }}
+                  className="inline-flex items-center justify-center gap-2"
+                >
+                  <PlusCircle className="h-4 w-4" />
+                  Registrar pago
+                </Button>
               )}
+              <Button
+                variant="secondary"
+                onClick={() => handlePrint(detailSale)}
+                className="inline-flex items-center justify-center gap-2"
+              >
+                <Printer className="h-4 w-4" />
+                Imprimir
+              </Button>
             </div>
-            <div>
-              <p className="text-xs font-semibold uppercase text-slate-500 mb-2">Productos y servicios</p>
-              <ul className="space-y-2 border border-slate-200 dark:border-slate-700 rounded-lg divide-y divide-slate-100 dark:divide-slate-800">
-                {(detailSale.items || []).map((it, i) => (
-                  <li key={i} className="flex justify-between px-3 py-2 text-sm">
-                    <span>{(it.productName || it.serviceName || "—")} × {it.quantity}</span>
-                    <span className="tabular-nums font-medium">{formatCurrency(it.subtotal)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <p className="text-lg font-bold border-t border-slate-200 dark:border-slate-700 pt-3">
-              Total: {formatCurrency(detailSale.total)}
-            </p>
           </div>
         )}
       </Modal>

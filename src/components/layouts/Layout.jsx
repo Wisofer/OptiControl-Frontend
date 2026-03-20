@@ -11,6 +11,7 @@ import { useSettings } from "../../hooks/useSettings";
 import { useAuth } from "../../contexts/AuthContext";
 import { useSnackbar } from "../../contexts/SnackbarContext";
 import { dashboardApi } from "../../api/dashboard";
+import { productsApi } from "../../api/products";
 import { cn } from "../../utils/cn";
 
 /**
@@ -25,6 +26,7 @@ export function Layout() {
   const { settings } = useSettings();
   const snackbar = useSnackbar();
   const alertsShownRef = useRef(false);
+  const lowStockLastCountRef = useRef(null);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", settings?.theme === "dark");
@@ -45,6 +47,38 @@ export function Layout() {
         }
       })
       .catch(() => {});
+  }, [snackbar]);
+
+  useEffect(() => {
+    let active = true;
+    const fetchLowStock = async () => {
+      try {
+        const data = await productsApi.lowStock();
+        const list = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+        if (!active) return;
+        const count = list.length;
+        const prev = lowStockLastCountRef.current;
+        if (count > 0 && (prev == null || prev !== count)) {
+          snackbar.info(`Inventario: ${count} producto(s) por reponer.`);
+        }
+        lowStockLastCountRef.current = count;
+      } catch {
+        if (active) lowStockLastCountRef.current = 0;
+      }
+    };
+
+    fetchLowStock();
+    const onFocus = () => fetchLowStock();
+    const onInventoryUpdated = () => fetchLowStock();
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("inventory-updated", onInventoryUpdated);
+    const interval = setInterval(fetchLowStock, 60000);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("inventory-updated", onInventoryUpdated);
+      clearInterval(interval);
+    };
   }, [snackbar]);
 
   return (

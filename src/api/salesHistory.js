@@ -24,7 +24,12 @@ export const salesHistoryApi = {
   get: (id) => api.get(`${base}/${toNumericId(id)}`),
   update: (id, body) => api.put(`${base}/${toNumericId(id)}`, body),
   cancel: (id) => api.put(`${base}/${toNumericId(id)}`, { status: "Cancelada" }),
-  addPayment: (id, amount) => api.put(`${base}/${toNumericId(id)}`, { addPayment: amount }),
+  addPayment: (id, amount, options = {}) =>
+    api.put(`${base}/${toNumericId(id)}`, {
+      addPayment: amount,
+      ...(options?.paymentType ? { paymentType: options.paymentType } : {}),
+      ...(options?.bank ? { bank: options.bank } : {}),
+    }),
   createOrReuseInvoice: (id) => api.post(`${base}/${toNumericId(id)}/invoice`, {}),
   ticketPdfUrl: (id) => api.get(`${base}/${toNumericId(id)}/ticket-pdf-url`),
 };

@@ -16,7 +16,7 @@ function normalizeListResponse(data) {
   return { list, totalCount: list.length, totalPages: 1, page: 1, pageSize: DEFAULT_PAGE_SIZE };
 }
 
-export function useSalesHistory(pageSize = DEFAULT_PAGE_SIZE) {
+export function useSalesHistory(searchParam = "", pageSize = DEFAULT_PAGE_SIZE) {
   const [page, setPage] = useState(1);
   const [sales, setSales] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -28,7 +28,7 @@ export function useSalesHistory(pageSize = DEFAULT_PAGE_SIZE) {
     setLoading(true);
     setError(null);
     try {
-      const data = await salesHistoryApi.list({ page, pageSize });
+      const data = await salesHistoryApi.list({ page, pageSize, search: searchParam || undefined });
       const normalized = normalizeListResponse(data);
       setSales(normalized.list);
       setTotalCount(normalized.totalCount);
@@ -41,19 +41,23 @@ export function useSalesHistory(pageSize = DEFAULT_PAGE_SIZE) {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize]);
+  }, [page, pageSize, searchParam]);
 
   useEffect(() => {
     fetchList();
   }, [fetchList]);
+
+  useEffect(() => {
+    if (searchParam !== undefined) setPage(1);
+  }, [searchParam]);
 
   const cancel = useCallback(async (id) => {
     await salesHistoryApi.cancel(id);
     await fetchList();
   }, [fetchList]);
 
-  const addPayment = useCallback(async (id, amount) => {
-    await salesHistoryApi.addPayment(id, amount);
+  const addPayment = useCallback(async (id, amount, options) => {
+    await salesHistoryApi.addPayment(id, amount, options);
     await fetchList();
   }, [fetchList]);
 

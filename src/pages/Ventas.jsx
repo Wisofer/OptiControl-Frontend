@@ -18,7 +18,7 @@ export function Ventas() {
   const [productSearch, setProductSearch] = useState("");
   const [ventasTab, setVentasTab] = useState(TAB_PRODUCTOS);
   const { clients } = useClients("", 200);
-  const { products, loading: productsLoading } = useProducts(productSearch, 50);
+  const { products, loading: productsLoading, refetch: refetchProducts } = useProducts(productSearch, 50);
   const { services, loading: servicesLoading } = useServices(productSearch, 50);
   const { settings } = useSettings();
   const snackbar = useSnackbar();
@@ -253,6 +253,8 @@ export function Ventas() {
       setSelectedClientId("");
       setCart([]);
       setMontoRecibido("");
+      await refetchProducts();
+      window.dispatchEvent(new Event("inventory-updated"));
     } catch (err) {
       snackbar.error(err?.message || "Error al registrar la venta");
     }
