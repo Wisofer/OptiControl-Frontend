@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Wrench, Plus, Pencil, Trash2, Search } from "lucide-react";
+import { Wrench, Plus, Pencil, Trash2, Search, FileSpreadsheet, FileText } from "lucide-react";
 import {
   Card,
   Table,
@@ -20,6 +20,7 @@ import { useServices } from "../hooks/useServices";
 import { useToggle } from "../hooks/useToggle";
 import { useSnackbar } from "../contexts/SnackbarContext";
 import { formatCurrency } from "../utils/format";
+import { useExport } from "../hooks/useExport";
 
 const EMPTY_FORM = {
   nombre_servicio: "",
@@ -31,6 +32,12 @@ export function Servicios() {
   const [search, setSearch] = useState("");
   const { services, loading, error, totalCount, totalPages, page, pageSize, setPage, create, update, remove } = useServices(search);
   const snackbar = useSnackbar();
+  const { exportLoading, handleExportExcel, handleExportPdf } = useExport(
+    "/api/services",
+    () => ({ search: search || undefined }),
+    "Servicios.xlsx",
+    "Servicios.pdf"
+  );
   const [modalOpen, setModalOpen] = useToggle(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -102,10 +109,30 @@ export function Servicios() {
             <p className="text-slate-600 dark:text-slate-300">Servicios que ofrece la óptica (examen visual, ajuste, etc.)</p>
           </div>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          Agregar servicio
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={exportLoading.excel}
+            className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 transition-colors hover:bg-emerald-100 disabled:opacity-50"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Descargar Excel
+          </button>
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            disabled={exportLoading.pdf}
+            className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-800 transition-colors hover:bg-red-100 disabled:opacity-50"
+          >
+            <FileText className="h-4 w-4" />
+            Descargar PDF
+          </button>
+          <Button onClick={openCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            Agregar servicio
+          </Button>
+        </div>
       </header>
 
       {error && (

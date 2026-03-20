@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Package, Plus, Pencil, Trash2, Search, AlertTriangle, PackagePlus } from "lucide-react";
+import { Package, Plus, Pencil, Trash2, Search, AlertTriangle, PackagePlus, FileSpreadsheet, FileText } from "lucide-react";
 import {
   Card,
   Table,
@@ -25,6 +25,7 @@ import { cn } from "../utils/cn";
 import { TIPOS_PRODUCTO } from "../constants/productTypes.js";
 import { isProductStockBajo } from "../utils/productStock.js";
 import { productsApi } from "../api/products.js";
+import { useExport } from "../hooks/useExport";
 
 function normalizeLowStockResponse(data) {
   if (Array.isArray(data)) return data;
@@ -59,6 +60,12 @@ export function Inventario() {
   const [restockTarget, setRestockTarget] = useState(null);
   const [restockCantidad, setRestockCantidad] = useState("1");
   const [restockLoading, setRestockLoading] = useState(false);
+  const { exportLoading, handleExportExcel, handleExportPdf } = useExport(
+    "/api/products",
+    () => ({ search: search || undefined }),
+    "Inventario.xlsx",
+    "Inventario.pdf"
+  );
 
   const loadLowStock = useCallback(async () => {
     setLowStockLoading(true);
@@ -181,10 +188,30 @@ export function Inventario() {
             <p className="text-slate-600 dark:text-slate-300">Gestión de productos de la óptica</p>
           </div>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          Agregar producto
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={exportLoading.excel}
+            className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 transition-colors hover:bg-emerald-100 disabled:opacity-50"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Descargar Excel
+          </button>
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            disabled={exportLoading.pdf}
+            className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-800 transition-colors hover:bg-red-100 disabled:opacity-50"
+          >
+            <FileText className="h-4 w-4" />
+            Descargar PDF
+          </button>
+          <Button onClick={openCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            Agregar producto
+          </Button>
+        </div>
       </header>
 
       {error && (

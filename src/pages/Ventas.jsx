@@ -136,6 +136,23 @@ export function Ventas() {
   const payloadClientId = selectedClientId ? String(selectedClientId) : "";
   const normalizedPaymentMethod = tipoPago === "Efecvo" ? "Efectivo" : tipoPago;
   const toPayloadMoney = (nioAmount) => (moneda === "USD" ? nioAmount / (exchangeRate || 1) : nioAmount);
+  const buildPayloadItems = () =>
+    cart.map((it) => {
+      const base = {
+        quantity: it.quantity,
+        unitPrice: toPayloadMoney(it.unitPrice),
+        subtotal: toPayloadMoney(it.subtotal),
+      };
+      if (it.type === "service") {
+        return { ...base, serviceId: it.serviceId, serviceName: it.serviceName };
+      }
+      return { ...base, productId: it.productId, productName: it.productName };
+    });
+  const resetSaleForm = () => {
+    setSelectedClientId("");
+    setCart([]);
+    setMontoRecibido("");
+  };
 
   const handleSaveQuote = async () => {
     if (cart.length === 0) {
@@ -144,17 +161,7 @@ export function Ventas() {
     }
     setRegistering(true);
     try {
-      const items = cart.map((it) => {
-        const base = {
-          quantity: it.quantity,
-          unitPrice: toPayloadMoney(it.unitPrice),
-          subtotal: toPayloadMoney(it.subtotal),
-        };
-        if (it.type === "service") {
-          return { ...base, serviceId: it.serviceId, serviceName: it.serviceName };
-        }
-        return { ...base, productId: it.productId, productName: it.productName };
-      });
+      const items = buildPayloadItems();
       const createdSale = await salesApi.create({
         clientId: payloadClientId,
         clientName: selectedClient.name,
@@ -187,9 +194,7 @@ export function Ventas() {
         moneda,
         tipoPago: normalizedPaymentMethod,
       });
-      setSelectedClientId("");
-      setCart([]);
-      setMontoRecibido("");
+      resetSaleForm();
     } catch (err) {
       snackbar.error(err?.message || "Error al guardar la cotización");
     }
@@ -203,17 +208,7 @@ export function Ventas() {
     }
     setRegistering(true);
     try {
-      const items = cart.map((it) => {
-        const base = {
-          quantity: it.quantity,
-          unitPrice: toPayloadMoney(it.unitPrice),
-          subtotal: toPayloadMoney(it.subtotal),
-        };
-        if (it.type === "service") {
-          return { ...base, serviceId: it.serviceId, serviceName: it.serviceName };
-        }
-        return { ...base, productId: it.productId, productName: it.productName };
-      });
+      const items = buildPayloadItems();
       const amountPaidEnMonedaPago = montoNum;
       const totalPagadoParaRegistro = Math.min(amountPaidEnMonedaPago, totalAPagar);
       const createdSale = await salesApi.create({
@@ -250,9 +245,7 @@ export function Ventas() {
         moneda,
         tipoPago: normalizedPaymentMethod,
       });
-      setSelectedClientId("");
-      setCart([]);
-      setMontoRecibido("");
+      resetSaleForm();
       await refetchProducts();
       window.dispatchEvent(new Event("inventory-updated"));
     } catch (err) {

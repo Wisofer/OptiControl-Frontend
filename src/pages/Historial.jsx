@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { History, Eye, Printer, Ban, PlusCircle, MessageCircle, Search } from "lucide-react";
+import { History, Eye, Printer, Ban, PlusCircle, MessageCircle, Search, FileSpreadsheet, FileText } from "lucide-react";
 import {
   Card,
   Table,
@@ -23,12 +23,30 @@ import { openProtectedPdf, getPdfOpenErrorMessage } from "../utils/pdf";
 import { formatCurrency, formatDate } from "../utils/format";
 import { STATUS_VARIANT } from "../constants/statusVariants";
 import { cn } from "../utils/cn";
+import { useExport } from "../hooks/useExport";
+import { whatsappTemplatesApi } from "../api/whatsappTemplates";
+import { buildInvoiceWhatsAppMessage } from "../utils/whatsappMessage";
+import {
+  getStatusRaw,
+  getStatusCanonical,
+  getSaleCurrency,
+  getEffectiveExchangeRate,
+  convertAmountBetweenCurrencies,
+  getPaymentTypeLabel,
+  getPaymentsHistory,
+} from "../utils/salesHistory";
 
 export function Historial() {
   const [search, setSearch] = useState("");
   const { sales, loading, error, totalCount, totalPages, page, pageSize, setPage, cancel, addPayment, createOrReuseInvoice, getTicketPdfUrl } = useSalesHistory(search);
   const { settings } = useSettings();
   const snackbar = useSnackbar();
+  const { exportLoading, handleExportExcel, handleExportPdf } = useExport(
+    "/api/sales-history",
+    () => ({ search: search || undefined }),
+    "Historial.xlsx",
+    "Historial.pdf"
+  );
   const [detailSale, setDetailSale] = useState(null);
   const [detailTab, setDetailTab] = useState("items");
   const [cancelTarget, setCancelTarget] = useState(null);
@@ -119,37 +137,45 @@ export function Historial() {
     await handlePrintTicket(sale);
   };
 
-  const handleWhatsAppFactura = (sale) => {
+  const handleWhatsAppFactura = async (sale) => {
     if (!sale) return;
-    const companyName = settings?.companyName?.trim() || "OptiControl";
-    const moneda = sale.currency || "NIO";
-    const isQuote = (sale.status || "").toLowerCase() === "cotizacion";
-    const documentTitle = isQuote ? "Cotización" : "Factura / Recibo";
-    const footerText = isQuote ? "Documento de cotización." : "Gracias por su compra.";
-    const fecha = sale.date ? new Date(sale.date).toLocaleString("es-NI") : "—";
-    const lines = [
-      `*${companyName}*`,
-      documentTitle,
-      "",
-      `Cliente: ${sale.clientName || "—"}`,
-      `Fecha: ${fecha}`,
-      `Forma de pago: ${sale.paymentMethod || "Efectivo"}`,
-      "",
-      "Productos / Servicios:",
-      ...(sale.items || []).map((it) => {
-        const name = it.productName || it.serviceName || "—";
-        return `• ${name} x${it.quantity} — ${formatCurrency(it.subtotal, moneda)}`;
-      }),
-      "",
-      `*Total: ${formatCurrency(sale.total ?? 0, moneda)}*`,
-      "",
-      ...(!isQuote && sale.invoicePublicPdfUrl ? [`Ver PDF: ${sale.invoicePublicPdfUrl}`, ""] : []),
-      footerText,
-    ];
-    const text = lines.join("\n");
-    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.open(url, "_blank", "noopener,noreferrer");
-    snackbar.success("Se abrió WhatsApp con la factura. Elija el contacto para enviar (simulación).");
+    let publicTicketUrl = sale.saleTicketPdfUrl || "";
+    if (!publicTicketUrl) {
+      try {
+        const res = await getTicketPdfUrl(sale.id);
+        publicTicketUrl = res?.pdfUrl || "";
+      } catch {
+        // Si no logramos obtener URL pública, enviamos mensaje sin enlace.
+      }
+    }
+    try {
+      const templateRes = await whatsappTemplatesApi.getDefault();
+      const template =
+        templateRes?.mensaje ??
+        "Hola {NombreCliente}, su factura {NumeroFactura}. Puede descargar el PDF aquí: {EnlacePDF}. Gracias por confiar en nosotros.";
+      const message = buildInvoiceWhatsAppMessage(template, {
+        invoice: {
+          ...sale,
+          amount: sale?.total ?? 0,
+          concept: (sale?.items || []).map((it) => it.productName || it.serviceName || "Ítem").join(", "),
+          status: sale?.status,
+          date: sale?.date,
+          id: sale?.invoiceId || sale?.id,
+        },
+        clientName: sale?.clientName || "Cliente",
+        clientId: sale?.clientId ?? "",
+        pdfUrl: publicTicketUrl,
+      });
+      const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
+      window.open(url, "_blank", "noopener,noreferrer");
+      snackbar.success(
+        publicTicketUrl
+          ? "Se abrió WhatsApp con plantilla y enlace del ticket."
+          : "Se abrió WhatsApp con plantilla. Esta venta no tiene enlace público de ticket."
+      );
+    } catch (err) {
+      snackbar.error(err?.message || "No se pudo preparar el mensaje de WhatsApp con la plantilla.");
+    }
   };
 
   const handleCancelConfirm = async () => {
@@ -165,19 +191,6 @@ export function Historial() {
     setCancelLoading(false);
   };
 
-  const getStatusRaw = (s) => String(s?.status ?? "").trim();
-  const getStatusCanonical = (s) => {
-    const normalized = getStatusRaw(s)
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase();
-    if (!normalized) return "pagada";
-    if (["pagada", "pagado", "completada", "completado"].includes(normalized)) return "pagada";
-    if (["pendiente", "parcial"].includes(normalized)) return "pendiente";
-    if (["cotizacion", "quote"].includes(normalized)) return "cotizacion";
-    if (["cancelada", "cancelado", "anulada", "anulado"].includes(normalized)) return "cancelada";
-    return normalized;
-  };
   const isPagada = (s) => getStatusCanonical(s) === "pagada";
   const isPendiente = (s) => getStatusCanonical(s) === "pendiente";
   const isCotizacion = (s) => getStatusCanonical(s) === "cotizacion";
@@ -205,34 +218,6 @@ export function Historial() {
 
   const getPagado = (s) => Number(s.amountPaid) || 0;
   const getPendiente = (s) => Math.max(0, (s.total || 0) - getPagado(s));
-  const getSaleCurrency = (s) => (String(s?.currency || "NIO").toUpperCase() === "USD" ? "USD" : "NIO");
-  const getEffectiveExchangeRate = (s) => {
-    const n = Number(s?.exchangeRate ?? settings?.exchangeRate);
-    return Number.isFinite(n) && n > 0 ? n : 36.8;
-  };
-  const convertAmountBetweenCurrencies = (amount, fromCurrency, toCurrency, sale) => {
-    if (fromCurrency === toCurrency) return amount;
-    const rate = getEffectiveExchangeRate(sale);
-    if (fromCurrency === "USD" && toCurrency === "NIO") return amount * rate;
-    if (fromCurrency === "NIO" && toCurrency === "USD") return amount / rate;
-    return amount;
-  };
-  const getPaymentTypeLabel = (p) => {
-    const raw = String(
-      p?.type ?? p?.paymentType ?? p?.payment_method ?? p?.paymentMethod ?? p?.method ?? ""
-    )
-      .trim()
-      .toLowerCase();
-    if (!raw) return "—";
-    if (["fisico", "físico", "efectivo", "cash"].includes(raw)) return "💵 Físico";
-    if (["tarjeta", "card"].includes(raw)) return "💳 Tarjeta";
-    if (["transferencia", "transfer", "bank_transfer"].includes(raw)) return "🏦 Transferencia";
-    return raw.charAt(0).toUpperCase() + raw.slice(1);
-  };
-  const getPaymentsHistory = (s) => {
-    const list = s?.paymentHistory || s?.payments || [];
-    return Array.isArray(list) ? list : [];
-  };
   const getParsedPaymentAmount = () => {
     const n = parseFloat(String(paymentAmount).replace(",", ".").trim());
     return Number.isFinite(n) ? n : 0;
@@ -271,6 +256,16 @@ export function Historial() {
       secondaryCurrency: null,
     };
   };
+  const closePaymentModal = () => {
+    setPaymentTarget(null);
+    setPaymentAmount("");
+    setPaymentCurrency("NIO");
+  };
+  const openPaymentModal = (sale) => {
+    setPaymentTarget(sale);
+    setPaymentAmount("");
+    setPaymentCurrency(getSaleCurrency(sale));
+  };
 
   const handleAddPaymentSubmit = async () => {
     if (!paymentTarget) return;
@@ -283,15 +278,19 @@ export function Historial() {
     try {
       const saleCurrency = getSaleCurrency(paymentTarget);
       const pendienteEnMonedaVenta = getPendiente(paymentTarget);
-      const amountInSaleCurrency = convertAmountBetweenCurrencies(amount, paymentCurrency, saleCurrency, paymentTarget);
+      const amountInSaleCurrency = convertAmountBetweenCurrencies(
+        amount,
+        paymentCurrency,
+        saleCurrency,
+        paymentTarget,
+        settings?.exchangeRate
+      );
       const amountToApply = Math.min(amountInSaleCurrency, pendienteEnMonedaVenta);
       await addPayment(paymentTarget.id, amountToApply, {
         paymentType: paymentCurrency === "USD" ? "Dolares" : "Cordobas",
       });
       const vuelto = getPaymentChangeDisplay();
-      setPaymentTarget(null);
-      setPaymentAmount("");
-      setPaymentCurrency("NIO");
+      closePaymentModal();
       snackbar.success(
         vuelto && vuelto.mainAmount > 0
           ? `Pago aplicado por ${formatCurrency(
@@ -308,7 +307,7 @@ export function Historial() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-col gap-1">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary-100 dark:bg-primary-900/50 text-primary-600 dark:text-primary-400">
             <History className="h-6 w-6" />
@@ -317,6 +316,26 @@ export function Historial() {
             <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Historial</h1>
             <p className="text-slate-600 dark:text-slate-300">Ventas realizadas</p>
           </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={exportLoading.excel}
+            className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 transition-colors hover:bg-emerald-100 disabled:opacity-50"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Descargar Excel
+          </button>
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            disabled={exportLoading.pdf}
+            className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-800 transition-colors hover:bg-red-100 disabled:opacity-50"
+          >
+            <FileText className="h-4 w-4" />
+            Descargar PDF
+          </button>
         </div>
       </header>
 
@@ -458,15 +477,14 @@ export function Historial() {
 
       <Modal
         open={!!paymentTarget}
-        onClose={() => {
-          setPaymentTarget(null);
-          setPaymentAmount("");
-          setPaymentCurrency("NIO");
-        }}
+        onClose={closePaymentModal}
         title="Agregar pago"
         size="sm"
       >
         {paymentTarget && (
+          (() => {
+            const paymentChange = getPaymentChangeDisplay();
+            return (
           <div className="space-y-4">
             <div className="rounded-xl bg-sky-600/90 text-white px-4 py-3">
               <p className="text-sm font-semibold">
@@ -528,7 +546,7 @@ export function Historial() {
                 </Button>
               </div>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                TC: C$ {getEffectiveExchangeRate(paymentTarget).toFixed(2)} = $1
+                TC: C$ {getEffectiveExchangeRate(paymentTarget, settings?.exchangeRate).toFixed(2)} = $1
               </p>
             </div>
             <div>
@@ -550,27 +568,23 @@ export function Historial() {
                   paymentCurrency
                 )}
               </p>
-              {getPaymentChangeDisplay() && (
+              {paymentChange && (
                 <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
                   Vuelto a devolver
                   {paymentCurrency === "USD" ? " (en córdobas)" : ""}:{" "}
-                  {formatCurrency(getPaymentChangeDisplay().mainAmount, getPaymentChangeDisplay().mainCurrency)}
+                  {formatCurrency(paymentChange.mainAmount, paymentChange.mainCurrency)}
                 </p>
               )}
-              {getPaymentChangeDisplay()?.secondaryAmount != null && (
+              {paymentChange?.secondaryAmount != null && (
                 <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
-                  equivale a {formatCurrency(getPaymentChangeDisplay().secondaryAmount, getPaymentChangeDisplay().secondaryCurrency)}
+                  equivale a {formatCurrency(paymentChange.secondaryAmount, paymentChange.secondaryCurrency)}
                 </p>
               )}
             </div>
             <div className="flex gap-2 justify-end">
               <Button
                 variant="secondary"
-                onClick={() => {
-                  setPaymentTarget(null);
-                  setPaymentAmount("");
-                  setPaymentCurrency("NIO");
-                }}
+                onClick={closePaymentModal}
               >
                 Cancelar
               </Button>
@@ -579,6 +593,8 @@ export function Historial() {
               </Button>
             </div>
           </div>
+            );
+          })()
         )}
       </Modal>
 
@@ -717,9 +733,7 @@ export function Historial() {
                 <Button
                   onClick={() => {
                     setDetailSale(null);
-                    setPaymentTarget(detailSale);
-                    setPaymentAmount("");
-                    setPaymentCurrency(getSaleCurrency(detailSale));
+                    openPaymentModal(detailSale);
                   }}
                   className="inline-flex items-center justify-center gap-2"
                 >
