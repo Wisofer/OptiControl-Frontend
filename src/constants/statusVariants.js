@@ -4,8 +4,13 @@
  */
 export const STATUS_VARIANT = {
   Pagado: "success",
+  Pagada: "success",
   Completado: "success",
+  pendiente: "warning",
   Pendiente: "warning",
   Parcial: "info",
+  cotizacion: "info",
+  Cotización: "info",
   Vencida: "danger",
+  Cancelada: "danger",
 };

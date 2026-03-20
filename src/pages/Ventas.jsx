@@ -8,7 +8,7 @@ import { useSettings } from "../hooks/useSettings";
 import { useSnackbar } from "../contexts/SnackbarContext";
 import { formatCurrency } from "../utils/format";
 import { salesApi } from "../api/sales.js";
-import { getToken } from "../api/token.js";
+import { openProtectedPdf, getPdfOpenErrorMessage } from "../utils/pdf";
 import { cn } from "../utils/cn";
 
 const TAB_PRODUCTOS = "productos";
@@ -133,6 +133,9 @@ export function Ventas() {
   };
 
   const getItemDisplayName = (it) => (it.type === "service" ? it.serviceName : it.productName);
+  const payloadClientId = selectedClientId ? String(selectedClientId) : "";
+  const normalizedPaymentMethod = tipoPago === "Efecvo" ? "Efectivo" : tipoPago;
+  const toPayloadMoney = (nioAmount) => (moneda === "USD" ? nioAmount / (exchangeRate || 1) : nioAmount);
 
   const handleSaveQuote = async () => {
     if (cart.length === 0) {
@@ -142,22 +145,49 @@ export function Ventas() {
     setRegistering(true);
     try {
       const items = cart.map((it) => {
-        const base = { quantity: it.quantity, unitPrice: it.unitPrice, subtotal: it.subtotal };
+        const base = {
+          quantity: it.quantity,
+          unitPrice: toPayloadMoney(it.unitPrice),
+          subtotal: toPayloadMoney(it.subtotal),
+        };
         if (it.type === "service") {
           return { ...base, serviceId: it.serviceId, serviceName: it.serviceName };
         }
         return { ...base, productId: it.productId, productName: it.productName };
       });
-      await salesApi.create({
-        clientId: selectedClient.id,
+      const createdSale = await salesApi.create({
+        clientId: payloadClientId,
         clientName: selectedClient.name,
         items,
-        total,
-        paymentMethod: tipoPago,
+        total: totalAPagar,
+        paymentMethod: normalizedPaymentMethod,
         currency: moneda,
         status: "cotizacion",
       });
       snackbar.success("Cotización guardada. Aparecerá en Historial.");
+      setSaleForPrintCard({
+        status: createdSale?.status || "cotizacion",
+        exchangeRate: createdSale?.exchangeRate ?? exchangeRate,
+        totalNio: createdSale?.totalNio ?? null,
+        totalUsd: createdSale?.totalUsd ?? null,
+        amountPaidNio: createdSale?.amountPaidNio ?? null,
+        amountPaidUsd: createdSale?.amountPaidUsd ?? null,
+        changeDue: createdSale?.changeDue ?? null,
+        changeCurrency: createdSale?.changeCurrency ?? null,
+        saleTicketPdfUrl: createdSale?.saleTicketPdfUrl ?? null,
+        invoiceId: createdSale?.invoiceId ?? null,
+        invoicePdfUrl: createdSale?.invoicePdfUrl ?? null,
+        invoicePublicPdfUrl: createdSale?.invoicePublicPdfUrl ?? null,
+        clientName: selectedClient.name,
+        items: cart.map((it) => ({ productName: getItemDisplayName(it), quantity: it.quantity, subtotal: it.subtotal })),
+        total: totalAPagar,
+        totalAPagarEnMoneda: totalAPagar,
+        amountPaid: 0,
+        amountPaidCordobas: 0,
+        moneda,
+        tipoPago: normalizedPaymentMethod,
+        exchangeRate,
+      });
       setSelectedClientId("");
       setCart([]);
       setMontoRecibido("");
@@ -175,22 +205,25 @@ export function Ventas() {
     setRegistering(true);
     try {
       const items = cart.map((it) => {
-        const base = { quantity: it.quantity, unitPrice: it.unitPrice, subtotal: it.subtotal };
+        const base = {
+          quantity: it.quantity,
+          unitPrice: toPayloadMoney(it.unitPrice),
+          subtotal: toPayloadMoney(it.subtotal),
+        };
         if (it.type === "service") {
           return { ...base, serviceId: it.serviceId, serviceName: it.serviceName };
         }
         return { ...base, productId: it.productId, productName: it.productName };
       });
       const amountPaidEnMonedaPago = montoNum;
-      const amountPaidCordobas = moneda === "USD" ? amountPaidEnMonedaPago * exchangeRate : amountPaidEnMonedaPago;
-      const totalPagadoParaRegistro = amountPaidCordobas >= totalCordobas ? totalCordobas : amountPaidCordobas;
+      const totalPagadoParaRegistro = Math.min(amountPaidEnMonedaPago, totalAPagar);
       const createdSale = await salesApi.create({
-        clientId: selectedClient.id,
+        clientId: payloadClientId,
         clientName: selectedClient.name,
         items,
-        total: totalCordobas,
+        total: totalAPagar,
         amountPaid: totalPagadoParaRegistro,
-        paymentMethod: tipoPago,
+        paymentMethod: normalizedPaymentMethod,
         currency: moneda,
       });
       const isPartial = amountPaidEnMonedaPago > 0 && amountPaidEnMonedaPago < totalAPagar;
@@ -198,17 +231,25 @@ export function Ventas() {
       snackbar.success(isPartial ? `Venta registrada. Pendiente: ${formatCurrency(pendiente, moneda)}` : "Venta registrada correctamente");
       setSaleForPrintCard({
         status: createdSale?.status || (isPartial ? "pendiente" : "Pagada"),
+        exchangeRate: createdSale?.exchangeRate ?? exchangeRate,
+        totalNio: createdSale?.totalNio ?? null,
+        totalUsd: createdSale?.totalUsd ?? null,
+        amountPaidNio: createdSale?.amountPaidNio ?? null,
+        amountPaidUsd: createdSale?.amountPaidUsd ?? null,
+        changeDue: createdSale?.changeDue ?? null,
+        changeCurrency: createdSale?.changeCurrency ?? null,
         saleTicketPdfUrl: createdSale?.saleTicketPdfUrl ?? null,
         invoiceId: createdSale?.invoiceId ?? null,
         invoicePdfUrl: createdSale?.invoicePdfUrl ?? null,
+        invoicePublicPdfUrl: createdSale?.invoicePublicPdfUrl ?? null,
         clientName: selectedClient.name,
         items: cart.map((it) => ({ productName: getItemDisplayName(it), quantity: it.quantity, subtotal: it.subtotal })),
-        total: totalCordobas,
+        total: totalAPagar,
         totalAPagarEnMoneda: totalAPagar,
         amountPaid: amountPaidEnMonedaPago,
-        amountPaidCordobas,
+        amountPaidCordobas: moneda === "USD" ? amountPaidEnMonedaPago * exchangeRate : amountPaidEnMonedaPago,
         moneda,
-        tipoPago,
+        tipoPago: normalizedPaymentMethod,
         exchangeRate,
       });
       setSelectedClientId("");
@@ -220,56 +261,25 @@ export function Ventas() {
     setRegistering(false);
   };
 
-  const openPdfUrl = async (pdfUrl, errorMessage) => {
-    if (!pdfUrl) return false;
-    try {
-      const token = getToken();
-      const res = await fetch(pdfUrl, {
-        method: "GET",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) {
-        if (res.status === 401) {
-          snackbar.error("Sesión expirada o no autorizada para abrir este PDF.");
-          return false;
-        }
-        snackbar.error(`No se pudo abrir el PDF (HTTP ${res.status}).`);
-        return false;
-      }
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const w = window.open(blobUrl, "_blank", "noopener,noreferrer");
-      if (!w) {
-        URL.revokeObjectURL(blobUrl);
-        snackbar.error(errorMessage || "Permite ventanas emergentes para abrir el PDF.");
-        return false;
-      }
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-      setSaleForPrintCard(null);
-      return true;
-    } catch (_) {
-      snackbar.error("Error de red al abrir el PDF.");
-      return false;
-    }
-  };
-
   const handlePrintTicket = async () => {
     if (!saleForPrintCard) return;
-    const opened = await openPdfUrl(
-      saleForPrintCard.saleTicketPdfUrl,
-      "Permite ventanas emergentes para abrir el ticket en PDF."
-    );
-    if (!opened) {
-      await handlePrintInvoice();
+    const result = await openProtectedPdf(saleForPrintCard.saleTicketPdfUrl);
+    if (!result.ok) {
+      snackbar.error(getPdfOpenErrorMessage(result, "No hay ticket PDF disponible para esta venta."));
+      return;
     }
+    setSaleForPrintCard(null);
   };
 
   const openBackendInvoicePdf = async () => {
     if (!saleForPrintCard?.invoicePdfUrl) return false;
-    return openPdfUrl(
-      saleForPrintCard.invoicePdfUrl,
-      "Permite ventanas emergentes para abrir la factura en PDF."
-    );
+    const result = await openProtectedPdf(saleForPrintCard.invoicePdfUrl);
+    if (!result.ok) {
+      snackbar.error(getPdfOpenErrorMessage(result, "No se pudo abrir la factura PDF."));
+      return false;
+    }
+    setSaleForPrintCard(null);
+    return true;
   };
 
   const handlePrintInvoice = async () => {
@@ -278,43 +288,12 @@ export function Ventas() {
       const opened = await openBackendInvoicePdf();
       if (opened) return;
     }
-    const companyName = settings?.companyName?.trim() || "OptiControl";
-    const rate = Number(saleForPrintCard.exchangeRate) || 36.8;
-    const itemsRows = saleForPrintCard.items
-      .map((it) => {
-        const subtotalEnMoneda = saleForPrintCard.moneda === "USD" ? it.subtotal / rate : it.subtotal;
-        return `<tr><td>${(it.productName || "").replace(/</g, "&lt;")}</td><td align="right">${it.quantity}</td><td align="right">${formatCurrency(subtotalEnMoneda, saleForPrintCard.moneda)}</td></tr>`;
-      })
-      .join("");
-    const html = `
-<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Factura</title>
-<style>body{font-family:system-ui,sans-serif;max-width:400px;margin:2rem auto;padding:1rem;} table{width:100%;border-collapse:collapse;} th,td{border-bottom:1px solid #eee;padding:6px 0;} th{text-align:left;} .total{font-size:1.25rem;font-weight:bold;margin-top:1rem;}</style>
-</head><body>
-<h2>${companyName}</h2>
-<p><strong>Factura / Recibo</strong></p>
-<p>Cliente: ${saleForPrintCard.clientName}</p>
-<p>Fecha: ${new Date().toLocaleString("es-NI")}</p>
-<p>Forma de pago: ${saleForPrintCard.tipoPago}</p>
-<table>
-<thead><tr><th>Producto</th><th align="right">Cant.</th><th align="right">Subtotal</th></tr></thead>
-<tbody>${itemsRows}</tbody>
-</table>
-<p class="total">Total: ${formatCurrency(saleForPrintCard.totalAPagarEnMoneda ?? saleForPrintCard.total, saleForPrintCard.moneda)}</p>
-<p style="margin-top:2rem;font-size:0.875rem;color:#666;">Gracias por su compra.</p>
-</body></html>`;
-    const w = window.open("", "_blank");
-    if (w) {
-      w.document.write(html);
-      w.document.close();
-      w.focus();
-      setTimeout(() => {
-        w.print();
-        w.close();
-      }, 300);
-    }
-    setSaleForPrintCard(null);
+    snackbar.error("No hay factura PDF disponible para esta venta.");
   };
+
+  const isQuote = (status) => String(status || "").toLowerCase() === "cotizacion";
+  const isPending = (status) => String(status || "").toLowerCase() === "pendiente";
+  const shouldPrintInvoice = (sale) => !!sale?.invoicePdfUrl && !isQuote(sale?.status) && !isPending(sale?.status);
 
   return (
     <div className="flex flex-col h-[calc(100vh-7rem)] min-h-[480px] overflow-hidden">
@@ -641,45 +620,40 @@ export function Ventas() {
         </Card>
       </div>
 
-      {/* Card: ¿Quieres imprimir la factura? (tras cada venta) */}
+      {/* Tras venta o cotización: imprimir ticket / factura */}
       <Modal
         open={!!saleForPrintCard}
         onClose={() => setSaleForPrintCard(null)}
-        title="Venta registrada"
+        title={saleForPrintCard && isQuote(saleForPrintCard.status) ? "Cotización guardada" : "Venta registrada"}
         size="md"
       >
         {saleForPrintCard && (
-          <div className="space-y-4">
-            <p className="text-slate-600 dark:text-slate-300">
-              {saleForPrintCard.saleTicketPdfUrl
-                ? "Ticket PDF backend disponible (80mm)."
-                : "No se recibió ticket PDF backend; puedes usar impresión local."}
-            </p>
-            <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 p-4 space-y-2">
-              <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
-                Cliente: {saleForPrintCard.clientName}
+          <div className="space-y-5">
+            <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/30 p-5 text-center">
+              <p className="text-base font-semibold text-emerald-800 dark:text-emerald-300">
+                {isQuote(saleForPrintCard.status) ? "Cotización guardada correctamente" : "Venta registrada correctamente"}
               </p>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                Total: {formatCurrency(saleForPrintCard.totalAPagarEnMoneda ?? saleForPrintCard.total, saleForPrintCard.moneda)} · {saleForPrintCard.tipoPago}
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                {shouldPrintInvoice(saleForPrintCard)
+                  ? "¿Deseas imprimir la factura ahora?"
+                  : isQuote(saleForPrintCard.status)
+                    ? "¿Deseas imprimir la cotización (ticket) ahora?"
+                    : "¿Deseas imprimir el ticket ahora?"}
               </p>
-              {saleForPrintCard.invoiceId && (
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Factura: {saleForPrintCard.invoiceId}
-                </p>
-              )}
             </div>
-            <div className="flex gap-3 pt-2">
-              <Button onClick={handlePrintTicket} className="flex-1 inline-flex items-center justify-center gap-2">
-                <FileText className="h-4 w-4" />
-                Imprimir ticket
-              </Button>
-              {saleForPrintCard.invoicePdfUrl && (
-                <Button onClick={handlePrintInvoice} variant="secondary" className="flex-1 inline-flex items-center justify-center gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {shouldPrintInvoice(saleForPrintCard) ? (
+                <Button onClick={handlePrintInvoice} className="inline-flex items-center justify-center gap-2 py-2.5">
                   <FileText className="h-4 w-4" />
                   Imprimir factura
                 </Button>
+              ) : (
+                <Button onClick={handlePrintTicket} className="inline-flex items-center justify-center gap-2 py-2.5">
+                  <FileText className="h-4 w-4" />
+                  {isQuote(saleForPrintCard.status) ? "Imprimir cotización" : "Imprimir ticket"}
+                </Button>
               )}
-              <Button variant="secondary" onClick={() => setSaleForPrintCard(null)}>
+              <Button variant="secondary" onClick={() => setSaleForPrintCard(null)} className="py-2.5">
                 No, gracias
               </Button>
             </div>
