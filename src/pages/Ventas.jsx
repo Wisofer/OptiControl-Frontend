@@ -303,9 +303,9 @@ export function Ventas() {
   const shouldPrintInvoice = (sale) => !!sale?.invoicePdfUrl && !isQuote(sale?.status) && !isPending(sale?.status);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-7rem)] min-h-[480px] overflow-hidden">
+    <div className="flex flex-col min-h-0 lg:h-[calc(100vh-7rem)] lg:min-h-[480px] lg:overflow-hidden">
       {/* Dos columnas: Productos (grid) | Carrito — fijas, sin scroll de página */}
-      <div className="grid gap-4 lg:grid-cols-[1fr_440px] flex-1 min-h-0 overflow-hidden">
+      <div className="grid gap-4 lg:grid-cols-[1fr_440px] lg:flex-1 lg:min-h-0 lg:overflow-hidden">
         {/* Columna izquierda: Productos en grid de tarjetas */}
         <Card className="flex flex-col min-h-0 overflow-hidden p-0">
           <div className="shrink-0 px-4 pt-4 pb-2 border-b border-slate-100 dark:border-slate-800 space-y-3">
@@ -348,7 +348,7 @@ export function Ventas() {
               />
             </div>
           </div>
-          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4">
+          <div className="p-4 lg:flex-1 lg:min-h-0 lg:overflow-y-auto lg:overflow-x-hidden">
             {ventasTab === TAB_PRODUCTOS && (
               <>
                 {productsLoading ? (
@@ -436,7 +436,7 @@ export function Ventas() {
         </Card>
 
         {/* Columna derecha: Cliente + Carrito fijo, scroll solo en la lista de ítems */}
-        <Card className="flex flex-col min-h-0 min-w-0 border-2 border-primary-200 dark:border-primary-800 p-0 overflow-hidden">
+        <Card className="flex flex-col min-w-0 border-2 border-primary-200 dark:border-primary-800 p-0 lg:min-h-0 lg:overflow-hidden">
           {/* Cliente */}
           <div className="shrink-0 px-4 pt-4 pb-2 border-b border-slate-100 dark:border-slate-800">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1">
@@ -464,7 +464,7 @@ export function Ventas() {
           </div>
 
           {/* Carrito: lista con scroll interno; bloque de pago siempre fijo abajo */}
-          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="flex flex-col lg:flex-1 lg:min-h-0 lg:overflow-hidden">
             {cart.length === 0 ? (
               <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center px-4 py-6">
                 <ShoppingCart className="h-10 w-10 text-slate-300 dark:text-slate-600 mb-2" />
@@ -473,7 +473,7 @@ export function Ventas() {
               </div>
             ) : (
               <>
-                <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-2 overscroll-contain">
+                <div className="px-4 py-2 lg:flex-1 lg:min-h-0 lg:overflow-y-auto lg:overflow-x-hidden lg:overscroll-contain">
                   <div className="space-y-1.5">
                     {cart.map((it) => (
                       <div

@@ -17,6 +17,7 @@ import {
   Badge,
 } from "../components/ui";
 import { useSalesHistory } from "../hooks/useSalesHistory";
+import { useClients } from "../hooks/useClients";
 import { useSettings } from "../hooks/useSettings";
 import { useSnackbar } from "../contexts/SnackbarContext";
 import { openProtectedPdf, getPdfOpenErrorMessage } from "../utils/pdf";
@@ -39,6 +40,7 @@ import {
 export function Historial() {
   const [search, setSearch] = useState("");
   const { sales, loading, error, totalCount, totalPages, page, pageSize, setPage, cancel, addPayment, createOrReuseInvoice, getTicketPdfUrl } = useSalesHistory(search);
+  const { clients } = useClients("", 300);
   const { settings } = useSettings();
   const snackbar = useSnackbar();
   const { exportLoading, handleExportExcel, handleExportPdf } = useExport(
@@ -62,6 +64,40 @@ export function Historial() {
     const name = (i) => i.productName || i.serviceName || "Ítem";
     if (items.length === 1) return `${name(items[0])} (x${items[0].quantity})`;
     return `${items.length} ítems`;
+  };
+  const getClientPhone = (sale) => {
+    const directPhone = String(
+      sale?.clientPhone ??
+        sale?.phone ??
+        sale?.telefono ??
+        sale?.client?.phone ??
+        sale?.client?.telefono ??
+        ""
+    ).trim();
+    if (directPhone) return directPhone;
+
+    const byId = clients.find((c) => String(c?.id) === String(sale?.clientId));
+    if (byId?.phone) return String(byId.phone).trim();
+    if (byId?.telefono) return String(byId.telefono).trim();
+
+    const byName = clients.find((c) => String(c?.name || "").trim().toLowerCase() === String(sale?.clientName || "").trim().toLowerCase());
+    if (byName?.phone) return String(byName.phone).trim();
+    if (byName?.telefono) return String(byName.telefono).trim();
+
+    return String(
+      sale?.customerPhone ??
+        sale?.phoneNumber ??
+        sale?.mobile ??
+        ""
+    ).trim();
+  };
+  const normalizeWhatsappPhone = (rawPhone) => {
+    const digits = String(rawPhone || "").replace(/\D/g, "");
+    if (!digits) return "";
+    if (digits.startsWith("505") && digits.length >= 11) return digits;
+    if (digits.length === 8) return `505${digits}`;
+    if (digits.startsWith("0") && digits.length === 9) return `505${digits.slice(1)}`;
+    return digits;
   };
 
   const handlePrintTicket = async (sale) => {
@@ -190,6 +226,71 @@ export function Historial() {
     }
     setCancelLoading(false);
   };
+  const hasWhatsAppNumber = (sale) => !!normalizeWhatsappPhone(getClientPhone(sale));
+  const getPrintTitle = (sale) => (
+    isCotizacion(sale)
+      ? "Imprimir ticket de cotización"
+      : (sale.invoicePdfUrl || sale.invoiceId)
+        ? "Imprimir factura"
+        : "Imprimir ticket"
+  );
+  const renderSaleActions = (sale) => (
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => {
+          setDetailSale(sale);
+          setDetailTab("items");
+        }}
+        className="rounded-lg p-2 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors"
+        title="Ver detalle"
+      >
+        <Eye className="h-4 w-4" />
+      </button>
+      {(isPagada(sale) || isPendiente(sale) || isCotizacion(sale)) && (
+        <>
+          <button
+            type="button"
+            onClick={() => handlePrint(sale)}
+            className="rounded-lg p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            title={getPrintTitle(sale)}
+          >
+            <Printer className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => handleWhatsAppFactura(sale)}
+            disabled={!hasWhatsAppNumber(sale)}
+            className={cn(
+              "rounded-lg p-2 transition-colors",
+              hasWhatsAppNumber(sale)
+                ? "text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20"
+                : "text-slate-300 dark:text-slate-600 cursor-not-allowed"
+            )}
+            title={
+              hasWhatsAppNumber(sale)
+                ? (isCotizacion(sale) ? "Enviar cotización por WhatsApp" : "Enviar factura por WhatsApp")
+                : "Este cliente no tiene número de WhatsApp"
+            }
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+            </svg>
+          </button>
+        </>
+      )}
+      {!isCancelada(sale) && (
+        <button
+          type="button"
+          onClick={() => setCancelTarget(sale)}
+          className="rounded-lg p-2 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
+          title="Cancelar venta"
+        >
+          <Ban className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  );
 
   const isPagada = (s) => getStatusCanonical(s) === "pagada";
   const isPendiente = (s) => getStatusCanonical(s) === "pendiente";
@@ -361,7 +462,7 @@ export function Historial() {
 
       <Card>
         <div className="mb-4">
-          <div className="relative max-w-sm">
+          <div className="relative w-full md:max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
             <input
               type="search"
@@ -382,7 +483,35 @@ export function Historial() {
           />
         ) : (
           <>
-            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+            <div className="space-y-3 md:hidden">
+              {sales.map((s) => (
+                <div
+                  key={s.id}
+                  className={cn(
+                    "rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 space-y-2",
+                    isCancelada(s) ? "opacity-75" : ""
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-100 truncate">{s.clientName}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{formatDate((s.date || "").slice(0, 10))}</p>
+                    </div>
+                    <Badge variant={getStatusBadgeVariant(s)}>{getStatusLabel(s)}</Badge>
+                  </div>
+                  <p className="text-sm text-slate-600 dark:text-slate-300 truncate" title={itemsSummary(s)}>
+                    {itemsSummary(s)}
+                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                      {formatSaleTotalWithEquivalent(s)}
+                    </p>
+                    {renderSaleActions(s)}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
               <Table>
                 <TableHead>
                   <TableRow>
@@ -412,59 +541,7 @@ export function Historial() {
                           {getStatusLabel(s)}
                         </Badge>
                       </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDetailSale(s);
-                              setDetailTab("items");
-                            }}
-                            className="rounded-lg p-2 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors"
-                            title="Ver detalle"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                          {(isPagada(s) || isPendiente(s) || isCotizacion(s)) && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => handlePrint(s)}
-                                className="rounded-lg p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                                title={
-                                  isCotizacion(s)
-                                    ? "Imprimir ticket de cotización"
-                                    : (s.invoicePdfUrl || s.invoiceId)
-                                      ? "Imprimir factura"
-                                      : "Imprimir ticket"
-                                }
-                              >
-                                <Printer className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleWhatsAppFactura(s)}
-                                className="rounded-lg p-2 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
-                                title={isCotizacion(s) ? "Enviar cotización por WhatsApp" : "Enviar factura por WhatsApp"}
-                              >
-                                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-                                </svg>
-                              </button>
-                            </>
-                          )}
-                          {!isCancelada(s) && (
-                            <button
-                              type="button"
-                              onClick={() => setCancelTarget(s)}
-                              className="rounded-lg p-2 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
-                              title="Cancelar venta"
-                            >
-                              <Ban className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
-                      </TableCell>
+                      <TableCell>{renderSaleActions(s)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
