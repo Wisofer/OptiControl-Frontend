@@ -12,7 +12,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { cn } from "../../utils/cn";
-import { APP_NAME, APP_LOGO_PATH } from "../../config/brand.js";
+import { APP_NAME } from "../../config/brand.js";
 import { useAuth } from "../../contexts/AuthContext";
 import { useSettings } from "../../hooks/useSettings";
 
@@ -68,14 +68,14 @@ export function Sidebar({ open = true, collapsed = false, onNavigate }) {
           {!collapsed ? (
             <div className="flex items-center min-w-0 flex-1">
               <img
-                src={APP_LOGO_PATH}
+                src="/assets/images/logo.png"
                 alt={companyName}
                 className="h-10 w-auto max-w-full object-contain object-left"
               />
             </div>
           ) : (
             <img
-              src={APP_LOGO_PATH}
+              src="/assets/images/logo.png"
               alt={companyName}
               title={companyName}
               className="h-10 w-10 object-contain object-center"

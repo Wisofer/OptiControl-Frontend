@@ -2,7 +2,6 @@
 export const APP_NAME = "OptiControl";
 export const APP_DESCRIPTION = "Sistema de gestión para ópticas";
 export const DEFAULT_COMPANY_NAME = "Mi Óptica";
-export const APP_LOGO_PATH = "/assets/images/file-_1_-removebg-preview.png";
 
 // Settings defaults
 export const DEFAULT_CURRENCY = "NIO";

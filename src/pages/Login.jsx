@@ -4,7 +4,7 @@ import { User, Eye, EyeOff, ArrowRight, Lock } from "lucide-react";
 import { Button } from "../components/ui";
 import { useAuth } from "../contexts/AuthContext";
 import { SessionLoader } from "../components/SessionLoader";
-import { APP_NAME, APP_LOGO_PATH } from "../config/brand.js";
+import { APP_NAME } from "../config/brand.js";
 
 export function Login() {
   const navigate = useNavigate();
@@ -56,7 +56,7 @@ export function Login() {
       <div className="hidden lg:flex lg:w-[48%] flex-col justify-between bg-primary-600 p-12">
         <div>
           <img
-            src={APP_LOGO_PATH}
+            src="/assets/images/logo.png"
             alt={APP_NAME}
             className="h-14 w-auto max-w-[220px] object-contain object-left"
           />
